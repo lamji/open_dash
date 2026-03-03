@@ -53,6 +53,8 @@ export interface TableColumnConfig {
   columnType?: "text" | "status" | "actions";
   statusOptions?: TableStatusOption[];
   actions?: TableActionItem[];
+  headerStyle?: React.CSSProperties;
+  cellStyle?: React.CSSProperties;
 }
 
 export interface TableConfig {
@@ -61,6 +63,8 @@ export interface TableConfig {
   data: Record<string, unknown>[];
   pagination?: { enabled: boolean; pageSize: number };
   searchable?: boolean;
+  rowStyle?: React.CSSProperties;
+  containerStyle?: React.CSSProperties;
 }
 
 export interface AnalyticsCardConfig {

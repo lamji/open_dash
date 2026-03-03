@@ -83,12 +83,22 @@ AVAILABLE PAGE COMPONENT TYPES (use these exact type strings):
        filterable?: boolean,
        columnType?: "text" | "status" | "actions",
        statusOptions?: [{ value: string, label: string, variant?: "default" | "secondary" | "destructive" | "outline" }],
-       actions?: [{ id: string, label: string, icon?: string, variant?: "default" | "destructive" }]
+       actions?: [{ id: string, label: string, icon?: string, variant?: "default" | "destructive" }],
+       headerStyle?: { color?: string, backgroundColor?: string, fontWeight?: string },
+       cellStyle?: { color?: string, backgroundColor?: string, fontSize?: string }
      }],
      data: [{ ...row values matching accessorKey }],
      pagination?: { enabled: boolean, pageSize: number },
-     searchable?: boolean
+     searchable?: boolean,
+     rowStyle?: { backgroundColor?: string, borderColor?: string },
+     containerStyle?: { backgroundColor?: string, borderColor?: string, borderRadius?: string }
    }
+   
+   TANSTACK TABLE STYLING (COMPLETE OVERRIDE SYSTEM):
+   - columns[].headerStyle: Style column headers (color, backgroundColor, fontWeight, etc.)
+   - columns[].cellStyle: Style cells in that column (color, backgroundColor, fontSize, etc.)
+   - rowStyle: Style ALL table rows (backgroundColor, borderColor, etc.)
+   - containerStyle: Style the entire table container (backgroundColor, borderColor, borderRadius, etc.)
    
    TANSTACK TABLE KNOWLEDGE BASE:
    - searchable: true/false — Shows/hides search input above table
@@ -100,10 +110,16 @@ AVAILABLE PAGE COMPONENT TYPES (use these exact type strings):
    - columns[].actions: For action columns with DropdownMenu
    
    To update table properties:
-   - Hide/show search: use update_page_component with configPath "searchable" and value false/true
-   - Change title: use update_page_component with configPath "title" and value "New Title"
-   - Update pagination: use update_page_component with configPath "pagination.pageSize" and value 20
-   - Modify column: use update_page_component with configPath "columns[0].header" and value "New Header"
+   - Hide/show search: update_page_component configPath:"searchable" value:false/true
+   - Change title: update_page_component configPath:"title" value:"New Title"
+   - Update pagination: update_page_component configPath:"pagination.pageSize" value:20
+   - Column header text: update_page_component configPath:"columns[0].header" value:"New Header"
+   - Column header color: update_page_component configPath:"columns[0].headerStyle" value:{"color":"white"}
+   - Column cell color: update_page_component configPath:"columns[0].cellStyle" value:{"color":"#333"}
+   - ALL column headers white: MULTIPLE update_page_component calls (columns[0].headerStyle, columns[1].headerStyle, etc.)
+   - ALL column cells black: MULTIPLE update_page_component calls (columns[0].cellStyle, columns[1].cellStyle, etc.)
+   - Row background: update_page_component configPath:"rowStyle" value:{"backgroundColor":"#f5f5f5"}
+   - Table container border: update_page_component configPath:"containerStyle" value:{"borderColor":"red"}
 
 3. "analytics-cards" — Grid of stat cards
    config: {

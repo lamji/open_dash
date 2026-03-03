@@ -297,6 +297,7 @@ function DataTable({ config }: { config: TableConfig }) {
             variant="ghost"
             data-test-id={`admin-table-sort-${col.accessorKey}`}
             className="flex items-center gap-1 font-[family-name:var(--font-heading)] text-xs uppercase tracking-wider text-[var(--muted)] hover:text-[var(--accent-cyan)] transition-colors h-auto p-0"
+            style={col.headerStyle}
             onClick={() =>
               col.sortable && column.toggleSorting(column.getIsSorted() === "asc")
             }
@@ -323,6 +324,7 @@ function DataTable({ config }: { config: TableConfig }) {
             <span
               data-test-id={`admin-table-cell-${col.accessorKey}-${rowIndex}`}
               className="font-[family-name:var(--font-mono)] text-sm text-[var(--foreground)]"
+              style={col.cellStyle}
             >
               {rawValue}
             </span>
@@ -353,6 +355,7 @@ function DataTable({ config }: { config: TableConfig }) {
     <div
       data-test-id="admin-table-container"
       className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden"
+      style={config.containerStyle}
     >
       {(config.title || config.searchable) && (
         <div
@@ -409,6 +412,7 @@ function DataTable({ config }: { config: TableConfig }) {
                 key={row.id}
                 data-test-id={`admin-table-row-${row.index}`}
                 className="border-b border-[var(--border)]/30 transition-colors hover:bg-[var(--accent-cyan)]/5"
+                style={config.rowStyle}
               >
                 {row.getVisibleCells().map((cell) => (
                   <td
