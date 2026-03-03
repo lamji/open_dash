@@ -1,6 +1,7 @@
-# OpenDash — AI-Powered Dashboard Builder
+# OpenDash — AI-Powered Dashboard Builder Phase 1
 
 **Version 1.0** | Initial Client Report
+**Status** | In Progress
 
 ---
 
@@ -200,6 +201,7 @@ Click the **AI** button in the top-right corner of the header.
 
 ### Step 2: Create a Page
 Type something like:
+
 ```
 Create a page called "Sales" with a shopping cart icon
 ```
@@ -438,6 +440,50 @@ Tables are the most powerful component. They support sorting, searching, paginat
 "Create a user table with name, email, role, and status columns"
 ```
 
+### Table Styling (Complete Override System)
+
+You can customize every visual aspect of tables:
+
+#### Column Headers
+```
+"Make all column headers white"
+"Make column 1 header bold and red"
+"Change all header backgrounds to navy"
+```
+→ AI generates: `columns[0].headerStyle = {"color":"white"}`, etc.
+
+#### Cell Text
+```
+"Make all cell text black"
+"Make price column text green and bold"
+"Change cell background to light gray"
+```
+→ AI generates: `columns[0].cellStyle = {"color":"black"}`, etc.
+
+#### Row Styling
+```
+"Make row backgrounds gray"
+"Add blue border between rows"
+"Make rows taller with padding"
+```
+→ AI generates: `rowStyle = {"backgroundColor":"#f5f5f5"}`
+
+#### Table Container
+```
+"Make table border red"
+"Add rounded corners to table"
+"Change table background to white"
+```
+→ AI generates: `containerStyle = {"borderColor":"red"}`
+
+#### Search Input
+```
+"Make table search placeholder color black"
+"Make table search border color black"
+"Change search input background to white"
+```
+→ AI generates: `searchInputStyle = {"--placeholder-color":"black"}`
+
 ### Table Features
 
 | Feature | How to Use |
@@ -449,6 +495,10 @@ Tables are the most powerful component. They support sorting, searching, paginat
 | **Actions column** | "Add an actions column with Edit and Delete buttons" |
 | **Update title** | "Change table [ID] title to Customer List" |
 | **Modify column** | "Rename column 1 to Full Name in table [ID]" |
+| **Style headers** | "Make all column headers white" |
+| **Style cells** | "Make all cell text black" |
+| **Style rows** | "Make row backgrounds gray" |
+| **Style container** | "Make table border red" |
 
 ---
 

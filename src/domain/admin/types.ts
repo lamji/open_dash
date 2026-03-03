@@ -43,6 +43,7 @@ export interface TableActionItem {
   label: string;
   icon?: string;
   variant?: "default" | "destructive";
+  style?: React.CSSProperties;
 }
 
 export interface TableColumnConfig {
@@ -55,6 +56,8 @@ export interface TableColumnConfig {
   actions?: TableActionItem[];
   headerStyle?: React.CSSProperties;
   cellStyle?: React.CSSProperties;
+  actionButtonStyle?: React.CSSProperties;
+  actionMenuStyle?: React.CSSProperties;
 }
 
 export interface TableConfig {
@@ -65,6 +68,7 @@ export interface TableConfig {
   searchable?: boolean;
   rowStyle?: React.CSSProperties;
   containerStyle?: React.CSSProperties;
+  searchInputStyle?: React.CSSProperties;
 }
 
 export interface AnalyticsCardConfig {
@@ -74,11 +78,15 @@ export interface AnalyticsCardConfig {
   trend?: "up" | "down" | "neutral";
   icon?: string;
   description?: string;
+  style?: React.CSSProperties;
+  titleStyle?: React.CSSProperties;
+  valueStyle?: React.CSSProperties;
 }
 
 export interface AnalyticsCardsConfig {
   columns?: number;
   cards: AnalyticsCardConfig[];
+  containerStyle?: React.CSSProperties;
 }
 
 export interface ChartDataPoint {
@@ -96,6 +104,8 @@ export interface BarChartConfig {
   xKey: string;
   bars: ChartBarEntry[];
   data: ChartDataPoint[];
+  containerStyle?: React.CSSProperties;
+  titleStyle?: React.CSSProperties;
 }
 
 export interface LineChartConfig {
@@ -103,6 +113,8 @@ export interface LineChartConfig {
   xKey: string;
   lines: { dataKey: string; label: string; color: string }[];
   data: ChartDataPoint[];
+  containerStyle?: React.CSSProperties;
+  titleStyle?: React.CSSProperties;
 }
 
 export interface ContainerConfig {
@@ -146,6 +158,7 @@ export interface ButtonConfig {
   fetchMethod?: "GET" | "POST" | "PUT" | "DELETE";
   collectInputIds?: string[];
   className?: string;
+  style?: React.CSSProperties;
 }
 
 export interface InputConfig {
@@ -156,12 +169,14 @@ export interface InputConfig {
   required?: boolean;
   className?: string;
   label?: string;
+  style?: React.CSSProperties;
 }
 
 export interface BadgeConfig {
   text: string;
   variant?: "default" | "secondary" | "destructive" | "outline";
   className?: string;
+  style?: React.CSSProperties;
 }
 
 export interface CardConfig {
@@ -170,6 +185,9 @@ export interface CardConfig {
   content?: string;
   footer?: string;
   className?: string;
+  style?: React.CSSProperties;
+  titleStyle?: React.CSSProperties;
+  contentStyle?: React.CSSProperties;
 }
 
 export interface SeparatorConfig {

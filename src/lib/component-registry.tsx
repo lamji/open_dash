@@ -250,12 +250,13 @@ function ActionsCell({
           size="icon"
           data-test-id={`admin-table-actions-btn-${rowIndex}`}
           className="h-7 w-7 text-[var(--muted)] hover:text-[var(--foreground)]"
+          style={col.actionButtonStyle}
         >
           <MoreHorizontal size={16} />
           <span className="sr-only">Row actions</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" style={col.actionMenuStyle}>
         <DropdownMenuLabel
           data-test-id={`admin-table-actions-label-${rowIndex}`}
         >
@@ -271,6 +272,7 @@ function ActionsCell({
                 ? "text-destructive focus:text-destructive"
                 : ""
             }
+            style={action.style}
           >
             {action.icon && (
               <DynamicIcon name={action.icon} size={14} className="mr-2" />
@@ -383,6 +385,7 @@ function DataTable({ config }: { config: TableConfig }) {
                 value={globalFilter}
                 onChange={(e) => setGlobalFilter(e.target.value)}
                 className="rounded-lg border-[var(--border)] bg-[var(--background)] py-1.5 pl-9 pr-3 text-sm text-[var(--foreground)] placeholder:text-[var(--muted)] focus:border-[var(--accent-cyan)] transition-colors"
+                style={config.searchInputStyle}
               />
             </div>
           )}
@@ -472,7 +475,7 @@ function AnalyticsCards({ config }: { config: AnalyticsCardsConfig }) {
   return (
     <div
       className="grid gap-4"
-      style={{ gridTemplateColumns: `repeat(${Math.min(cols, 4)}, 1fr)` }}
+      style={{ gridTemplateColumns: `repeat(${Math.min(cols, 4)}, 1fr)`, ...config.containerStyle }}
     >
       {config.cards.map((card, idx) => {
         const TrendIcon =
@@ -492,11 +495,12 @@ function AnalyticsCards({ config }: { config: AnalyticsCardsConfig }) {
           <div
             key={idx}
             className="group relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 transition-all hover:border-[var(--accent-cyan)]/40"
+            style={card.style}
           >
             <div className="absolute inset-0 bg-gradient-to-br from-[var(--accent-cyan)]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             <div className="relative z-10">
               <div className="flex items-center justify-between mb-3">
-                <span className="font-[family-name:var(--font-heading)] text-xs uppercase tracking-wider text-[var(--muted)]">
+                <span className="font-[family-name:var(--font-heading)] text-xs uppercase tracking-wider text-[var(--muted)]" style={card.titleStyle}>
                   {card.title}
                 </span>
                 {card.icon && (
@@ -507,7 +511,7 @@ function AnalyticsCards({ config }: { config: AnalyticsCardsConfig }) {
                   />
                 )}
               </div>
-              <div className="font-[family-name:var(--font-heading)] text-2xl font-bold text-[var(--foreground)]">
+              <div className="font-[family-name:var(--font-heading)] text-2xl font-bold text-[var(--foreground)]" style={card.valueStyle}>
                 {card.value}
               </div>
               {card.change && (
@@ -532,9 +536,9 @@ function AnalyticsCards({ config }: { config: AnalyticsCardsConfig }) {
 // ─── BarChartBlock ──────────────────────────────────────────
 function BarChartBlock({ config }: { config: BarChartConfig }) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5" style={config.containerStyle}>
       {config.title && (
-        <h3 className="mb-4 font-[family-name:var(--font-heading)] text-lg font-semibold text-[var(--foreground)]">
+        <h3 className="mb-4 font-[family-name:var(--font-heading)] text-lg font-semibold text-[var(--foreground)]" style={config.titleStyle}>
           {config.title}
         </h3>
       )}
@@ -578,9 +582,9 @@ function BarChartBlock({ config }: { config: BarChartConfig }) {
 // ─── LineChartBlock ─────────────────────────────────────────
 function LineChartBlock({ config }: { config: LineChartConfig }) {
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5" style={config.containerStyle}>
       {config.title && (
-        <h3 className="mb-4 font-[family-name:var(--font-heading)] text-lg font-semibold text-[var(--foreground)]">
+        <h3 className="mb-4 font-[family-name:var(--font-heading)] text-lg font-semibold text-[var(--foreground)]" style={config.titleStyle}>
           {config.title}
         </h3>
       )}
@@ -923,6 +927,7 @@ function ButtonBlock({ config }: { config: ButtonConfig }) {
       size={config.size}
       disabled={config.disabled}
       className={config.className}
+      style={config.style}
       onClick={handleClick}
       data-test-id="dynamic-button"
     >
@@ -950,6 +955,7 @@ function InputBlock({ config }: { config: InputConfig }) {
         disabled={config.disabled}
         required={config.required}
         className={config.className}
+        style={config.style}
         data-test-id="dynamic-input"
       />
     </div>
@@ -959,7 +965,7 @@ function InputBlock({ config }: { config: InputConfig }) {
 function BadgeBlock({ config }: { config: BadgeConfig }) {
   const { style: ds, classes: dc } = parseDynamicStyles(config.className);
   return (
-    <Badge variant={config.variant} className={dc || undefined} style={ds} data-test-id="dynamic-badge">
+    <Badge variant={config.variant} className={dc || undefined} style={{...ds, ...config.style}} data-test-id="dynamic-badge">
       {config.text}
     </Badge>
   );
@@ -978,15 +984,15 @@ function CardBlock({
   const hasChildren = sorted.length > 0;
 
   return (
-    <Card className={config.className} data-test-id="dynamic-card">
+    <Card className={config.className} style={config.style} data-test-id="dynamic-card">
       {(config.title || config.description) && (
         <CardHeader>
-          {config.title && <CardTitle>{config.title}</CardTitle>}
+          {config.title && <CardTitle style={config.titleStyle}>{config.title}</CardTitle>}
           {config.description && <CardDescription>{config.description}</CardDescription>}
         </CardHeader>
       )}
       {(config.content || hasChildren) && (
-        <CardContent>
+        <CardContent style={config.contentStyle}>
           {config.content && typeof config.content === 'string' && config.content}
           {hasChildren && sorted.map((child) => {
             const ChildRenderer = COMPONENT_REGISTRY[child.type];

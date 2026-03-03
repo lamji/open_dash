@@ -91,7 +91,8 @@ AVAILABLE PAGE COMPONENT TYPES (use these exact type strings):
      pagination?: { enabled: boolean, pageSize: number },
      searchable?: boolean,
      rowStyle?: { backgroundColor?: string, borderColor?: string },
-     containerStyle?: { backgroundColor?: string, borderColor?: string, borderRadius?: string }
+     containerStyle?: { backgroundColor?: string, borderColor?: string, borderRadius?: string },
+     searchInputStyle?: { color?: string, borderColor?: string, backgroundColor?: string }
    }
    
    TANSTACK TABLE STYLING (COMPLETE OVERRIDE SYSTEM):
@@ -99,6 +100,10 @@ AVAILABLE PAGE COMPONENT TYPES (use these exact type strings):
    - columns[].cellStyle: Style cells in that column (color, backgroundColor, fontSize, etc.)
    - rowStyle: Style ALL table rows (backgroundColor, borderColor, etc.)
    - containerStyle: Style the entire table container (backgroundColor, borderColor, borderRadius, etc.)
+   - searchInputStyle: Style the search input (color, borderColor, backgroundColor, etc.)
+   
+   IMPORTANT — Placeholder color uses CSS property "--placeholder-color" NOT "placeholderColor":
+   - For placeholder text color, use: searchInputStyle = {"--placeholder-color": "black"} (CSS variable syntax)
    
    TANSTACK TABLE KNOWLEDGE BASE:
    - searchable: true/false — Shows/hides search input above table
@@ -120,6 +125,9 @@ AVAILABLE PAGE COMPONENT TYPES (use these exact type strings):
    - ALL column cells black: MULTIPLE update_page_component calls (columns[0].cellStyle, columns[1].cellStyle, etc.)
    - Row background: update_page_component configPath:"rowStyle" value:{"backgroundColor":"#f5f5f5"}
    - Table container border: update_page_component configPath:"containerStyle" value:{"borderColor":"red"}
+   - Search input placeholder color: update_page_component configPath:"searchInputStyle" value:{"--placeholder-color":"black"}
+   - Search input border color: update_page_component configPath:"searchInputStyle" value:{"borderColor":"black"}
+   - Search input background: update_page_component configPath:"searchInputStyle" value:{"backgroundColor":"white"}
 
 3. "analytics-cards" — Grid of stat cards
    config: {
@@ -128,23 +136,45 @@ AVAILABLE PAGE COMPONENT TYPES (use these exact type strings):
        title: string, value: string, change?: string,
        trend?: "up" | "down" | "neutral",
        icon?: string (Lucide icon name),
-       description?: string
-     }]
+       description?: string,
+       style?: { backgroundColor?, borderColor?, etc. },
+       titleStyle?: { color?, fontSize?, etc. },
+       valueStyle?: { color?, fontSize?, fontWeight?, etc. }
+     }],
+     containerStyle?: { backgroundColor?, borderColor?, etc. }
    }
+   
+   ANALYTICS CARDS STYLING:
+   - Container: update_page_component configPath:"containerStyle" value:{"backgroundColor":"white"}
+   - Individual card: update_page_component configPath:"cards[0].style" value:{"backgroundColor":"blue"}
+   - Card title: update_page_component configPath:"cards[0].titleStyle" value:{"color":"white"}
+   - Card value: update_page_component configPath:"cards[0].valueStyle" value:{"fontSize":"32px"}
 
 4. "chart-bar" — Bar chart
    config: {
      title?: string, xKey: string,
      bars: [{ dataKey: string, label: string, color: string (hex) }],
-     data: [{ [xKey]: string, [dataKey]: number }]
+     data: [{ [xKey]: string, [dataKey]: number }],
+     containerStyle?: { backgroundColor?, borderColor?, boxShadow?, etc. },
+     titleStyle?: { color?, fontSize?, fontWeight?, etc. }
    }
+   
+   BAR CHART STYLING:
+   - Container: update_page_component configPath:"containerStyle" value:{"backgroundColor":"#1a1a1a"}
+   - Title: update_page_component configPath:"titleStyle" value:{"color":"white"}
 
 5. "chart-line" — Line chart
    config: {
      title?: string, xKey: string,
      lines: [{ dataKey: string, label: string, color: string (hex) }],
-     data: [{ [xKey]: string, [dataKey]: number }]
+     data: [{ [xKey]: string, [dataKey]: number }],
+     containerStyle?: { backgroundColor?, borderColor?, boxShadow?, etc. },
+     titleStyle?: { color?, fontSize?, fontWeight?, etc. }
    }
+   
+   LINE CHART STYLING:
+   - Container: update_page_component configPath:"containerStyle" value:{"backgroundColor":"white"}
+   - Title: update_page_component configPath:"titleStyle" value:{"fontWeight":"bold"}
 
 SHADCN UI COMPONENTS (use these instead of raw HTML):
 
@@ -155,8 +185,14 @@ SHADCN UI COMPONENTS (use these instead of raw HTML):
      value?: string,
      disabled?: boolean,
      icon?: string (icon name for search inputs),
-     className?: string
+     className?: string,
+     style?: { borderColor?, backgroundColor?, color?, fontSize?, etc. }
    }
+   
+   INPUT STYLING:
+   - Border color: update_page_component configPath:"style" value:{"borderColor":"blue"}
+   - Background: update_page_component configPath:"style" value:{"backgroundColor":"#f5f5f5"}
+   - Text size: update_page_component configPath:"style" value:{"fontSize":"16px"}
    
    UPDATING INPUT PROPERTIES:
    When user asks to change input properties (e.g., "change placeholder", "make it search type", "add icon"):
@@ -184,8 +220,15 @@ SHADCN UI COMPONENTS (use these instead of raw HTML):
      fetchMethod?: "GET" | "POST" | "PUT" | "DELETE" (HTTP method for fetch, default GET),
      collectInputIds?: [string] (array of component IDs whose input values to collect on click),
      className?: string,
-     disabled?: boolean
+     disabled?: boolean,
+     style?: { backgroundColor?, color?, fontSize?, padding?, etc. }
    }
+   
+   BUTTON STYLING:
+   - Background: update_page_component configPath:"style" value:{"backgroundColor":"red"}
+   - Text color: update_page_component configPath:"style" value:{"color":"white"}
+   - Size: update_page_component configPath:"style" value:{"fontSize":"18px","padding":"12px 24px"}
+   
    When user wants a button with a function:
    - "alert on click" → set onAction: "alert", alertMessage: "Hello!"
    - "open google on click" → set onAction: "link", href: "https://google.com"
@@ -194,10 +237,33 @@ SHADCN UI COMPONENTS (use these instead of raw HTML):
    - "get input values and alert" → set onAction: "alert", collectInputIds: ["input-component-id-1", "input-component-id-2"]
 
 9. "badge" — Badge component (shadcn Badge)
-   config: { text: string, variant?: "default" | "secondary" | "destructive" | "outline", className?: string }
+   config: { 
+     text: string, 
+     variant?: "default" | "secondary" | "destructive" | "outline", 
+     className?: string,
+     style?: { backgroundColor?, color?, fontSize?, etc. }
+   }
+   
+   BADGE STYLING:
+   - Background: update_page_component configPath:"style" value:{"backgroundColor":"purple"}
+   - Text color: update_page_component configPath:"style" value:{"color":"white"}
 
 10. "card" — Card container (shadcn Card) — CAN HOLD CHILD COMPONENTS
-   config: { title?: string, description?: string, content?: string, footer?: string, className?: string }
+   config: { 
+     title?: string, 
+     description?: string, 
+     content?: string, 
+     footer?: string, 
+     className?: string,
+     style?: { backgroundColor?, borderColor?, boxShadow?, etc. },
+     titleStyle?: { color?, fontSize?, fontWeight?, etc. },
+     contentStyle?: { backgroundColor?, padding?, etc. }
+   }
+   
+   CARD STYLING:
+   - Card background: update_page_component configPath:"style" value:{"backgroundColor":"#1a1a1a"}
+   - Card title: update_page_component configPath:"titleStyle" value:{"color":"white"}
+   - Card content: update_page_component configPath:"contentStyle" value:{"padding":"20px"}
    IMPORTANT: Cards are PARENT components like containers. After creating a card, use add_child_component to add children inside it.
    The children will render inside CardContent. You can add buttons, typography, inputs, badges, or any other components as children.
    Example flow:
