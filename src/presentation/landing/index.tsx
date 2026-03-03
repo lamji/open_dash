@@ -142,7 +142,7 @@ export default function LandingPage() {
               Features
             </a>
             <a
-              href="#how-it-works"
+              href="/how-to"
               className="text-sm font-medium text-gray-600 transition-colors hover:text-gray-900"
               data-test-id="landing-nav-how-it-works"
             >

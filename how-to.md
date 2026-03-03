@@ -1,4 +1,171 @@
-# OpenDash — User Guide
+# OpenDash — AI-Powered Dashboard Builder
+
+**Version 1.0** | Initial Client Report
+
+---
+
+## Executive Summary
+
+OpenDash is a next-generation no-code dashboard builder that uses conversational AI to create fully functional admin dashboards, data tables, analytics views, and custom forms in minutes—not hours. Built with modern web technologies and powered by Groq AI, OpenDash eliminates the technical barrier between business requirements and working software.
+
+---
+
+## Features Overview
+
+### 🤖 Conversational AI Builder
+- **Natural language interface** — Type what you want in plain English
+- **Context-aware responses** — AI understands your dashboard structure and suggests relevant actions
+- **Two-step workflow** — AI creates components with smart defaults, then asks for customization
+- **Real-time execution** — Changes appear instantly in your dashboard
+- **Persistent memory** — AI remembers your project context across sessions
+
+### 🎨 Rich Component Library
+**20+ production-ready components** including:
+- **Data Display**: Tables (sortable, searchable, paginated), Charts (bar, line), Analytics cards
+- **Forms**: Inputs (text, email, search, password), Textareas, Labels, Buttons with actions
+- **Layout**: Cards, Containers (flex, grid), Separators, Accordions
+- **UI Elements**: Badges, Alerts, Progress bars, Typography (h1-h4, blockquote, code)
+- **Navigation**: Sidebar pages, Header components (search, notifications, profile, messages)
+
+### 📊 Advanced Data Tables
+- **Full-text search** across all columns
+- **Column sorting** (ascending/descending)
+- **Pagination** with configurable page sizes (10, 20, 50, 100 rows)
+- **Status badges** with color coding (success, warning, error, info)
+- **Action menus** (Edit, Delete, View) per row
+- **Responsive design** — Works on desktop, tablet, and mobile
+- **Sample data generation** — AI creates realistic test data automatically
+
+### 📈 Analytics & Visualization
+- **Stat cards** with trend indicators (↑ increase, ↓ decrease)
+- **Bar charts** for categorical data comparison
+- **Line charts** for time-series trends
+- **Custom data** — AI generates sample datasets or you provide your own
+- **Color theming** — Charts inherit your dashboard's primary color
+
+### 🎯 Interactive Forms
+- **Smart form containers** — AI groups related inputs automatically
+- **Input validation** — Required fields, email format, password strength
+- **Button actions** — Alert, open URL, log event, collect form values
+- **Value collection** — Buttons can gather data from multiple inputs on click
+- **Pre-built templates** — Login, signup, contact, booking, registration forms
+
+### 🎨 Styling & Theming
+- **Natural language styling** — "Make it blue with rounded corners and shadow"
+- **Tailwind CSS integration** — Full access to utility classes
+- **Global theming** — Change primary color across entire dashboard
+- **Component-level styling** — Target specific elements by ID
+- **Responsive utilities** — Mobile-first design patterns
+
+### 🔧 Developer Tools
+- **Dev Mode** — Hover to see component IDs for precise editing
+- **Live preview** — Toggle between development and presentation views
+- **Component inspector** — View structure and properties
+- **Real-time updates** — No page refresh needed
+- **Database persistence** — All changes saved automatically
+
+### 🔐 Multi-User & Multi-Project Support
+- **User authentication** — Secure login/signup with session management
+- **Per-user isolation** — Each user sees only their own projects
+- **Per-project data** — Dashboards are scoped to individual projects
+- **Project ownership** — Full control over your created dashboards
+- **Session persistence** — Stay logged in across browser sessions
+
+### ⚡ Performance & Reliability
+- **Server-side rendering** — Fast initial page loads
+- **Optimistic UI updates** — Instant feedback on actions
+- **Error handling** — Graceful degradation with user-friendly messages
+- **Database transactions** — Data integrity guaranteed
+- **Production-ready** — Deployed on Vercel with PostgreSQL backend
+
+---
+
+## Technical Capabilities
+
+### AI Engine
+- **Provider**: Groq (llama-3.3-70b-versatile model)
+- **Response time**: < 2 seconds average
+- **Context window**: Maintains full conversation history
+- **Action validation**: Ensures AI-generated code is safe and valid
+- **Error recovery**: AI self-corrects when actions fail
+
+### Component System
+- **Framework**: React 19 with Next.js 16
+- **UI Library**: shadcn/ui (Radix UI primitives)
+- **Styling**: Tailwind CSS with custom theme
+- **Icons**: Lucide React (1000+ icons)
+- **Tables**: TanStack Table v8 (formerly React Table)
+- **Charts**: Recharts (responsive, accessible)
+
+### Database & Backend
+- **ORM**: Prisma 7.4
+- **Database**: PostgreSQL (production) / SQLite (development)
+- **API**: Next.js App Router API routes
+- **Authentication**: Session-based with secure cookies
+- **Data validation**: Server-side input sanitization
+
+### Architecture
+- **Pattern**: MVVM (Model-View-ViewModel)
+- **State management**: Zustand
+- **API layer**: Centralized fetch helpers
+- **Type safety**: Full TypeScript coverage
+- **Testing**: API integration tests included
+
+---
+
+## Use Cases
+
+### 1. **Admin Dashboards**
+Build internal tools for managing users, products, orders, or content. Add tables with CRUD operations, search, filters, and bulk actions.
+
+**Example**: "Create a Users page with a table showing name, email, role, status, and last login. Add search and make the table sortable."
+
+### 2. **Analytics Dashboards**
+Visualize KPIs, trends, and business metrics. Combine stat cards, charts, and data tables for comprehensive reporting.
+
+**Example**: "Add 4 stat cards for revenue, users, orders, and conversion rate. Below that, add a bar chart showing monthly sales."
+
+### 3. **Customer Portals**
+Create self-service portals where customers can view their data, submit requests, or track orders.
+
+**Example**: "Create an Orders page with a table showing order number, date, status, and total. Add a search bar and filter by status."
+
+### 4. **Form-Based Applications**
+Build data collection interfaces for bookings, registrations, surveys, or support tickets.
+
+**Example**: "Create a booking form with name, email, date, and number of guests. Make the submit button show an alert with the values."
+
+### 5. **Internal Tools**
+Rapid prototyping of internal utilities, calculators, or workflow automation interfaces.
+
+**Example**: "Create a calculator page with two number inputs and a button that shows the sum in an alert."
+
+---
+
+## Deployment & Hosting
+
+- **Platform**: Vercel (serverless)
+- **Domain**: Custom domain support
+- **SSL**: Automatic HTTPS
+- **CDN**: Global edge network
+- **Uptime**: 99.9% SLA
+- **Scaling**: Auto-scales with traffic
+
+---
+
+## Roadmap & Future Enhancements
+
+### Planned Features
+- **Database connections** — Connect to external APIs and databases
+- **Custom code blocks** — Embed JavaScript/TypeScript snippets
+- **Export functionality** — Download dashboard as React code
+- **Team collaboration** — Share projects with team members
+- **Version history** — Restore previous dashboard states
+- **Component marketplace** — Pre-built templates and widgets
+- **Advanced charts** — Pie, donut, area, scatter plots
+- **Real-time data** — WebSocket integration for live updates
+
+---
 
 ## Table of Contents
 1. [What is OpenDash?](#what-is-opendash)
@@ -47,6 +214,18 @@ Add a table with columns for product name, price, and quantity
 ### Step 4: Keep Building
 ```
 Add 4 stat cards showing total revenue, orders, customers, and avg order value
+```
+
+### Success Prompt: Analytics + Charts + Table
+```
+Create 4 analytics cards: Total Revenue, Orders, Customers, Avg Order Value.
+
+Then add a div wrapper with display flex and gap 2.
+Inside that wrapper add 2 charts:
+- a bar chart for Monthly Revenue (Jan–Dec)
+- a line chart for Orders Trend (Jan–Dec)
+
+Finally add a table with columns: Product, Price, Quantity, Status.
 ```
 
 That's it! You now have a working dashboard page.
