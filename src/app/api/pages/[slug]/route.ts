@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getProjectContext, isErrorResponse } from "@/lib/project-auth";
 
 interface FlatComponent {
   id: string;
@@ -56,12 +57,15 @@ function buildTree(flat: FlatComponent[]): TreeComponent[] {
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ slug: string }> }
 ) {
+  const ctx = await getProjectContext(req);
+  if (isErrorResponse(ctx)) return ctx;
+
   const { slug } = await params;
-  const sidebarItem = await prisma.sidebarItem.findUnique({
-    where: { slug },
+  const sidebarItem = await prisma.sidebarItem.findFirst({
+    where: { slug, projectId: ctx.projectId },
     include: {
       page: {
         include: {

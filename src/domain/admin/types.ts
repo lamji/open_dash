@@ -805,6 +805,7 @@ export interface AIExecutionResult {
 
 // ─── Store ─────────────────────────────────────────────────
 export interface DashboardStore {
+  projectId: string | null;
   sidebarItems: SidebarItemData[];
   activePage: string | null;
   pageComponents: PageComponentData[];
@@ -821,6 +822,7 @@ export interface DashboardStore {
   activeView: string | null;
   headerHistory: HeaderComponentData[][];
 
+  setProjectId: (id: string) => void;
   setActivePage: (slug: string) => void;
   setSidebarItems: (items: SidebarItemData[]) => void;
   setPageComponents: (components: PageComponentData[]) => void;
@@ -839,9 +841,9 @@ export interface DashboardStore {
   addChatMessage: (msg: ChatMessageData) => void;
   setAiThinking: (v: boolean) => void;
 
-  fetchSidebar: () => Promise<void>;
-  fetchPage: (slug: string) => Promise<void>;
-  fetchConfig: (key: string) => Promise<void>;
-  fetchHeaderComponents: () => Promise<void>;
+  loadSidebar: () => Promise<void>;
+  loadPage: (slug: string) => Promise<void>;
+  loadConfig: (key: string) => Promise<void>;
+  loadHeaderComponents: () => Promise<void>;
   sendAiMessage: (message: string, retryAttempt?: number) => Promise<void>;
 }

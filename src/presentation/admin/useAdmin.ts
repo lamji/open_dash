@@ -17,6 +17,7 @@ import {
 } from "@/lib/admin-api";
 
 export const useAdminStore = create<DashboardStore>((set, get) => ({
+  projectId: null,
   sidebarItems: [],
   activePage: null,
   pageComponents: [],
@@ -33,6 +34,7 @@ export const useAdminStore = create<DashboardStore>((set, get) => ({
   activeView: null,
   headerHistory: [],
 
+  setProjectId: (id: string) => set({ projectId: id }),
   setActivePage: (slug: string) => set({ activePage: slug }),
   setSidebarItems: (items: SidebarItemData[]) => set({ sidebarItems: items }),
   setPageComponents: (components: PageComponentData[]) =>
@@ -82,34 +84,40 @@ export const useAdminStore = create<DashboardStore>((set, get) => ({
     set((s) => ({ chatMessages: [...s.chatMessages, msg] })),
   setAiThinking: (v: boolean) => set({ isAiThinking: v }),
 
-  fetchSidebar: async () => {
+  loadSidebar: async () => {
     try {
-      const items = await fetchSidebarApi();
+      const pid = get().projectId;
+      if (!pid) return;
+      const items = await fetchSidebarApi(pid);
       set({ sidebarItems: items });
 
       if (!get().activePage && items.length > 0) {
         const first = items[0];
         set({ activePage: first.slug });
-        get().fetchPage(first.slug);
+        get().loadPage(first.slug);
       }
     } catch (err) {
-      console.error("Failed to fetch sidebar:", err);
+      console.error("Failed to load sidebar:", err);
     }
   },
 
-  fetchPage: async (slug: string) => {
+  loadPage: async (slug: string) => {
     try {
+      const pid = get().projectId;
+      if (!pid) return;
       set({ activePage: slug });
-      const components = await fetchPageApi(slug);
+      const components = await fetchPageApi(slug, pid);
       set({ pageComponents: components });
     } catch (err) {
-      console.error("Failed to fetch page:", err);
+      console.error("Failed to load page:", err);
     }
   },
 
-  fetchConfig: async (key: string) => {
+  loadConfig: async (key: string) => {
     try {
-      const value = await fetchConfigApi(key);
+      const pid = get().projectId;
+      if (!pid) return;
+      const value = await fetchConfigApi(key, pid);
       if (!value) return;
       if (key === "logo") set({ logo: value as LogoConfig });
       if (key === "header") set({ header: value as HeaderConfig });
@@ -121,16 +129,18 @@ export const useAdminStore = create<DashboardStore>((set, get) => ({
         }
       }
     } catch (err) {
-      console.error("Failed to fetch config:", err);
+      console.error("Failed to load config:", err);
     }
   },
 
-  fetchHeaderComponents: async () => {
+  loadHeaderComponents: async () => {
     try {
-      const components = await fetchHeaderComponentsApi();
+      const pid = get().projectId;
+      if (!pid) return;
+      const components = await fetchHeaderComponentsApi(pid);
       set({ headerComponents: components });
     } catch (err) {
-      console.error("Failed to fetch header components:", err);
+      console.error("Failed to load header components:", err);
     }
   },
 
@@ -151,6 +161,7 @@ export const useAdminStore = create<DashboardStore>((set, get) => ({
     try {
       const data = await sendAiMessageApi({
         message,
+        projectId: store.projectId!,
         state: {
           sidebarItems: store.sidebarItems,
           activePage: store.activePage,
@@ -176,15 +187,15 @@ export const useAdminStore = create<DashboardStore>((set, get) => ({
         chatMessages: [...s.chatMessages, assistantMsg],
       }));
 
-      await store.fetchSidebar();
+      await store.loadSidebar();
       store.pushHeaderHistory();
-      await store.fetchHeaderComponents();
+      await store.loadHeaderComponents();
       if (store.activePage) {
-        await store.fetchPage(store.activePage);
+        await store.loadPage(store.activePage);
       }
-      await store.fetchConfig("logo");
-      await store.fetchConfig("header");
-      await store.fetchConfig("primaryColor");
+      await store.loadConfig("logo");
+      await store.loadConfig("header");
+      await store.loadConfig("primaryColor");
 
       set({ isAiThinking: false });
     } catch (err) {

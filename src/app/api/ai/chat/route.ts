@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
 import { prisma } from "@/lib/prisma";
 import type { AIAction, AIResponse } from "@/domain/admin/types";
+import { getProjectContext, isErrorResponse } from "@/lib/project-auth";
 
 const COMPONENT_SCHEMAS = `
 SHADCN COMPONENT PRIORITY (MANDATORY — READ FIRST):
@@ -497,7 +498,7 @@ function isAIActionType(type: string): type is AIAction["type"] {
   ].includes(type);
 }
 
-async function executeActions(actions: AIAction[]): Promise<{ action: string; success: boolean; id?: string; error?: string; validated?: boolean }[]> {
+async function executeActions(actions: AIAction[], projectId: string): Promise<{ action: string; success: boolean; id?: string; error?: string; validated?: boolean }[]> {
   const results: { action: string; success: boolean; id?: string; error?: string; validated?: boolean }[] = [];
 
   for (const action of actions) {
@@ -511,6 +512,7 @@ async function executeActions(actions: AIAction[]): Promise<{ action: string; su
               icon: p.icon ?? "LayoutDashboard",
               slug: p.slug,
               order: p.order ?? 0,
+              projectId,
             },
           });
           await prisma.page.create({
@@ -522,8 +524,10 @@ async function executeActions(actions: AIAction[]): Promise<{ action: string; su
 
         case "update_sidebar_item": {
           const p = action.payload as { slug: string; updates: { label?: string; icon?: string; order?: number } };
+          const sidebarToUpdate = await prisma.sidebarItem.findFirst({ where: { slug: p.slug, projectId } });
+          if (!sidebarToUpdate) { results.push({ action: action.type, success: false, error: `Sidebar item '${p.slug}' not found` }); break; }
           await prisma.sidebarItem.update({
-            where: { slug: p.slug },
+            where: { id: sidebarToUpdate.id },
             data: p.updates,
           });
           results.push({ action: action.type, success: true });
@@ -532,8 +536,8 @@ async function executeActions(actions: AIAction[]): Promise<{ action: string; su
 
         case "delete_sidebar_item": {
           const p = action.payload as { slug: string };
-          const item = await prisma.sidebarItem.findUnique({
-            where: { slug: p.slug },
+          const item = await prisma.sidebarItem.findFirst({
+            where: { slug: p.slug, projectId },
             include: { page: true },
           });
           if (item?.page) {
@@ -552,15 +556,15 @@ async function executeActions(actions: AIAction[]): Promise<{ action: string; su
             slug: string;
             components: { type: string; config: Record<string, unknown>; order: number }[];
           };
-          const sidebarItem = await prisma.sidebarItem.findUnique({
-            where: { slug: p.slug },
+          const sidebarItemForSet = await prisma.sidebarItem.findFirst({
+            where: { slug: p.slug, projectId },
             include: { page: true },
           });
-          if (!sidebarItem?.page) {
+          if (!sidebarItemForSet?.page) {
             results.push({ action: action.type, success: false, error: `Page not found for slug: ${p.slug}` });
             break;
           }
-          await prisma.pageComponent.deleteMany({ where: { pageId: sidebarItem.page.id } });
+          await prisma.pageComponent.deleteMany({ where: { pageId: sidebarItemForSet.page.id } });
           for (const comp of p.components) {
             // Add default visibility styles for empty div elements
             const config = { ...comp.config };
@@ -570,7 +574,7 @@ async function executeActions(actions: AIAction[]): Promise<{ action: string; su
             
             await prisma.pageComponent.create({
               data: {
-                pageId: sidebarItem.page.id,
+                pageId: sidebarItemForSet.page.id,
                 type: comp.type,
                 config: JSON.stringify(config),
                 order: comp.order,
@@ -587,11 +591,11 @@ async function executeActions(actions: AIAction[]): Promise<{ action: string; su
             parentId?: string;
             component: { type: string; config: Record<string, unknown>; order: number };
           };
-          const si = await prisma.sidebarItem.findUnique({
-            where: { slug: p.slug },
+          const siForAdd = await prisma.sidebarItem.findFirst({
+            where: { slug: p.slug, projectId },
             include: { page: true },
           });
-          if (!si?.page) {
+          if (!siForAdd?.page) {
             results.push({ action: action.type, success: false, error: `Page not found for slug: ${p.slug}` });
             break;
           }
@@ -613,7 +617,7 @@ async function executeActions(actions: AIAction[]): Promise<{ action: string; su
           
           const created = await prisma.pageComponent.create({
             data: {
-              pageId: si.page.id,
+              pageId: siForAdd.page.id,
               type: p.component.type,
               config: JSON.stringify(config),
               order: p.component.order,
@@ -658,18 +662,19 @@ async function executeActions(actions: AIAction[]): Promise<{ action: string; su
 
         case "update_config": {
           const p = action.payload as { key: string; value: Record<string, unknown> };
-          await prisma.appConfig.upsert({
-            where: { key: p.key },
-            update: { value: JSON.stringify(p.value) },
-            create: { key: p.key, value: JSON.stringify(p.value) },
-          });
+          const existingConfig = await prisma.appConfig.findFirst({ where: { key: p.key, projectId } });
+          if (existingConfig) {
+            await prisma.appConfig.update({ where: { id: existingConfig.id }, data: { value: JSON.stringify(p.value) } });
+          } else {
+            await prisma.appConfig.create({ data: { key: p.key, value: JSON.stringify(p.value), projectId } });
+          }
           results.push({ action: action.type, success: true });
           break;
         }
 
         case "add_header_component": {
           const p = action.payload as { type: string; position: number; config: Record<string, unknown> };
-          const existing = await prisma.headerComponent.findFirst({ where: { type: p.type } });
+          const existing = await prisma.headerComponent.findFirst({ where: { type: p.type, projectId } });
           if (existing) {
             await prisma.headerComponent.update({
               where: { id: existing.id },
@@ -677,7 +682,7 @@ async function executeActions(actions: AIAction[]): Promise<{ action: string; su
             });
           } else {
             await prisma.headerComponent.create({
-              data: { type: p.type, position: p.position, config: JSON.stringify(p.config) },
+              data: { type: p.type, position: p.position, config: JSON.stringify(p.config), projectId },
             });
           }
           results.push({ action: action.type, success: true });
@@ -686,7 +691,7 @@ async function executeActions(actions: AIAction[]): Promise<{ action: string; su
 
         case "update_header_component": {
           const p = action.payload as { type: string; config: Record<string, unknown> };
-          const comp = await prisma.headerComponent.findFirst({ where: { type: p.type } });
+          const comp = await prisma.headerComponent.findFirst({ where: { type: p.type, projectId } });
           if (!comp) {
             results.push({ action: action.type, success: false, error: `Header component '${p.type}' not found` });
             break;
@@ -703,7 +708,7 @@ async function executeActions(actions: AIAction[]): Promise<{ action: string; su
 
         case "remove_header_component": {
           const p = action.payload as { type: string };
-          const toDelete = await prisma.headerComponent.findFirst({ where: { type: p.type } });
+          const toDelete = await prisma.headerComponent.findFirst({ where: { type: p.type, projectId } });
           if (toDelete) {
             await prisma.headerComponent.delete({ where: { id: toDelete.id } });
           }
@@ -715,7 +720,7 @@ async function executeActions(actions: AIAction[]): Promise<{ action: string; su
           const p = action.payload as { order: { type: string; position: number }[] };
           const updatePromises = [];
           for (const item of p.order) {
-            const comp = await prisma.headerComponent.findFirst({ where: { type: item.type } });
+            const comp = await prisma.headerComponent.findFirst({ where: { type: item.type, projectId } });
             if (comp) {
               updatePromises.push(
                 prisma.headerComponent.update({
@@ -730,7 +735,7 @@ async function executeActions(actions: AIAction[]): Promise<{ action: string; su
           // HARD VALIDATION: Verify positions actually changed in database
           let validated = true;
           for (const item of p.order) {
-            const comp = await prisma.headerComponent.findFirst({ where: { type: item.type } });
+            const comp = await prisma.headerComponent.findFirst({ where: { type: item.type, projectId } });
             if (!comp || comp.position !== item.position) {
               validated = false;
               break;
@@ -749,15 +754,15 @@ async function executeActions(actions: AIAction[]): Promise<{ action: string; su
         case "set_primary_color": {
           const p = action.payload as { color: string };
           // Store primary color in appConfig table
-          const existing = await prisma.appConfig.findUnique({ where: { key: "primaryColor" } });
-          if (existing) {
+          const existingColor = await prisma.appConfig.findFirst({ where: { key: "primaryColor", projectId } });
+          if (existingColor) {
             await prisma.appConfig.update({
-              where: { key: "primaryColor" },
+              where: { id: existingColor.id },
               data: { value: JSON.stringify({ color: p.color }) },
             });
           } else {
             await prisma.appConfig.create({
-              data: { key: "primaryColor", value: JSON.stringify({ color: p.color }) },
+              data: { key: "primaryColor", value: JSON.stringify({ color: p.color }), projectId },
             });
           }
           results.push({ action: action.type, success: true });
@@ -944,7 +949,7 @@ async function executeActions(actions: AIAction[]): Promise<{ action: string; su
               results.push({ action: action.type, success: false, error: `Header component ID ${p.elementId} not found` });
             }
           } else if (p.elementType === "sidebar_item") {
-            const item = await prisma.sidebarItem.findUnique({ where: { slug: p.elementId } });
+            const item = await prisma.sidebarItem.findFirst({ where: { slug: p.elementId, projectId } });
             if (item) {
               const updates: Record<string, unknown> = {};
               if (typeof p.styles === 'string') {
@@ -1000,11 +1005,11 @@ async function executeActions(actions: AIAction[]): Promise<{ action: string; su
 
         case "reorder_page_components": {
           const p = action.payload as { slug: string; componentOrder: { id: string; order: number }[] };
-          const si = await prisma.sidebarItem.findUnique({
-            where: { slug: p.slug },
+          const siForReorder = await prisma.sidebarItem.findFirst({
+            where: { slug: p.slug, projectId },
             include: { page: true },
           });
-          if (!si?.page) {
+          if (!siForReorder?.page) {
             results.push({ action: action.type, success: false, error: `Page not found for slug: ${p.slug}` });
             break;
           }
@@ -1075,6 +1080,9 @@ async function executeActions(actions: AIAction[]): Promise<{ action: string; su
 
 export async function POST(req: Request) {
   try {
+    const ctx = await getProjectContext(req);
+    if (isErrorResponse(ctx)) return ctx;
+
     const body = await req.json();
     const { message, state, history } = body as {
       message: string;
@@ -1129,16 +1137,17 @@ export async function POST(req: Request) {
       });
     }
 
-    const results = await executeActions(actions);
+    const results = await executeActions(actions, ctx.projectId);
 
     await prisma.chatMessage.create({
-      data: { role: "user", content: message },
+      data: { role: "user", content: message, projectId: ctx.projectId },
     });
     await prisma.chatMessage.create({
       data: {
         role: "assistant",
         content: parsed.message || "",
         actions: JSON.stringify(actions),
+        projectId: ctx.projectId,
       },
     });
 

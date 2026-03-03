@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Bot,
   PanelLeftClose,
@@ -629,20 +630,27 @@ function FullNotificationView({ onClose, onNotificationClick }: { onClose: () =>
 
 export default function AdminShell() {
   const store = useAdminStore();
+  const searchParams = useSearchParams();
+  const params = Object.fromEntries(searchParams.entries());
+  const isPreview = params["preview"] === "true";
+  const projectId = params["projectId"] ?? null;
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [chatInput, setChatInput] = useState("");
   const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null);
 
   useEffect(() => {
+    if (projectId) {
+      store.setProjectId(projectId);
+    }
     store.hydrateDevMode();
-    store.fetchSidebar();
-    store.fetchHeaderComponents();
-    store.fetchConfig("logo");
-    store.fetchConfig("header");
-    store.fetchConfig("primaryColor");
+    store.loadSidebar();
+    store.loadHeaderComponents();
+    store.loadConfig("logo");
+    store.loadConfig("header");
+    store.loadConfig("primaryColor");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [projectId]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -783,7 +791,7 @@ export default function AdminShell() {
                       <Button
                         variant="ghost"
                         data-test-id={`sidebar-${item.slug}`}
-                        onClick={() => store.fetchPage(item.slug)}
+                        onClick={() => store.loadPage(item.slug)}
                         className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-all h-auto justify-start ${
                           isActive
                             ? "bg-[var(--primary)]/10 text-[var(--primary)] font-medium"
@@ -814,7 +822,7 @@ export default function AdminShell() {
 
         {/* Sidebar footer */}
         <div className="space-y-2 p-3">
-          {!store.isSidebarCollapsed && (
+          {!store.isSidebarCollapsed && !isPreview && (
             <div className="flex items-center justify-between rounded-lg bg-[var(--muted)]/50 px-3 py-2">
               <div className="flex items-center gap-2">
                 <Code size={14} className="text-[var(--muted-foreground)]" />
@@ -851,20 +859,22 @@ export default function AdminShell() {
 
           <div className="flex items-center gap-2">
             {rightComps.map((comp) => renderHeaderComponent(comp, store.devMode, handleNotificationClick, store.toggleNotificationView, handleProfileMenuClick, handleGenericMenuItemAction))}
-            {/* AI toggle button — always rightmost */}
-            <Button
-              variant="ghost"
-              data-test-id="ai-toggle"
-              onClick={() => store.toggleChat()}
-              className={`flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-all ${
-                store.isChatOpen
-                  ? "bg-[var(--primary)]/10 text-[var(--primary)]"
-                  : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
-              }`}
-            >
-              <Bot size={16} />
-              {!store.isChatOpen && <span className="text-xs">AI</span>}
-            </Button>
+            {/* AI toggle button — always rightmost, hidden in preview mode */}
+            {!isPreview && (
+              <Button
+                variant="ghost"
+                data-test-id="ai-toggle"
+                onClick={() => store.toggleChat()}
+                className={`flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-all ${
+                  store.isChatOpen
+                    ? "bg-[var(--primary)]/10 text-[var(--primary)]"
+                    : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
+                }`}
+              >
+                <Bot size={16} />
+                {!store.isChatOpen && <span className="text-xs">AI</span>}
+              </Button>
+            )}
           </div>
         </header>
 
@@ -910,8 +920,8 @@ export default function AdminShell() {
         </main>
       </div>
 
-      {/* ─── AI Chat Panel ──────────────────────────────────── */}
-      {store.isChatOpen && (
+      {/* ─── AI Chat Panel (hidden in preview mode) ──────────── */}
+      {store.isChatOpen && !isPreview && (
         <aside className="flex w-[380px] shrink-0 flex-col border-l border-[var(--border)] bg-white animate-slide-in-right">
           {/* Chat header */}
           <div className="flex h-14 items-center justify-between border-b border-[var(--border)] px-4">
