@@ -1,0 +1,72 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model SidebarItem {
+  id        String   @id @default(cuid())
+  label     String
+  icon      String   @default("LayoutDashboard")
+  slug      String   @unique
+  order     Int      @default(0)
+  parentId  String?
+  parent    SidebarItem?  @relation("SidebarChildren", fields: [parentId], references: [id])
+  children  SidebarItem[] @relation("SidebarChildren")
+  page      Page?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Page {
+  id            String          @id @default(cuid())
+  sidebarItemId String          @unique
+  sidebarItem   SidebarItem     @relation(fields: [sidebarItemId], references: [id], onDelete: Cascade)
+  components    PageComponent[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+model PageComponent {
+  id        String           @id @default(cuid())
+  pageId    String
+  page      Page             @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    PageComponent?   @relation("ComponentChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children  PageComponent[]  @relation("ComponentChildren")
+  type      String
+  config    String           @default("{}")
+  order     Int              @default(0)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+}
+
+model AppConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @default("{}")
+  updatedAt DateTime @updatedAt
+}
+
+model HeaderComponent {
+  id        String   @id @default(cuid())
+  type      String
+  position  Int      @default(0)
+  config    String   @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  role      String
+  content   String
+  actions   String?
+  createdAt DateTime @default(now())
+}
