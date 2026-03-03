@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+
+export const runtime = "nodejs";
 import {
   hashPassword,
   verifyPassword,
@@ -27,6 +29,15 @@ function getClientIp(req: NextRequest): string {
 
 export async function POST(req: NextRequest) {
   try {
+    // Validate DATABASE_URL exists
+    if (!process.env.DATABASE_URL) {
+      console.error("[AUTH] DATABASE_URL is not set");
+      return NextResponse.json(
+        { ok: false, error: "Database configuration error" },
+        { status: 500 }
+      );
+    }
+
     const body = await req.json();
     const { action } = body;
 
@@ -38,10 +49,11 @@ export async function POST(req: NextRequest) {
       { ok: false, error: "Invalid action" },
       { status: 400 }
     );
-  } catch {
+  } catch (err) {
+    console.error("[AUTH] POST handler error:", err);
     return NextResponse.json(
-      { ok: false, error: "Invalid request body" },
-      { status: 400 }
+      { ok: false, error: err instanceof Error ? err.message : "Internal server error" },
+      { status: 500 }
     );
   }
 }
