@@ -26,6 +26,7 @@ import {
 import { useBuilder, BUILDER_CATEGORIES } from "./useBuilder";
 import { WIDGET_PREVIEWS, WIDGET_CATEGORIES } from "@/presentation/widgets";
 import type { LayoutType, CodeEditorTab } from "@/domain/builder/types";
+import type { WidgetTemplate } from "@/domain/widgets/types";
 import { DASHBOARD_TEMPLATES } from "@/lib/dashboard-templates";
 import { WidgetPickerCard } from "@/components/widgets/widget-picker-card";
 
@@ -686,11 +687,19 @@ export default function BuilderShell() {
               </div>
             ) : (
               <div className="p-6" data-test-id="builder-variant-grid">
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 <WidgetPickerCard
                   templates={variantTemplates as any}
-                  onSelect={(template) => {
+                  onSelect={(template: any) => {
                     if (showWidgetVariantPicker) {
-                      placeWidget(showWidgetVariantPicker.blockId, showWidgetVariantPicker.slotIdx, template);
+                      placeWidget(showWidgetVariantPicker.blockId, showWidgetVariantPicker.slotIdx, {
+                        slug: template.slug,
+                        category: template.category,
+                        title: template.title,
+                        description: template.description,
+                        jsxCode: template.jsxCode,
+                        widgetData: template.widgetData,
+                      } as WidgetTemplate);
                     }
                     setSelectedSlot(null);
                   }}
