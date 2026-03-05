@@ -1276,7 +1276,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
   "chart-bar": (data) => {
     const title = (data.title as string) ?? "Bar Chart";
     const xKey = (data.xKey as string) ?? "name";
-    const chartData = (data.data as Record<string, any>[]) ?? [];
+    const chartData = (data.data as Record<string, unknown>[]) ?? [];
     const bars = (data.bars as Array<{dataKey: string; label: string; color: string}>) ?? [];
 
     if (!chartData.length || !bars.length) {
@@ -1309,7 +1309,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
   "chart-line": (data) => {
     const title = (data.title as string) ?? "Line Chart";
     const xKey = (data.xKey as string) ?? "name";
-    const chartData = (data.data as Record<string, any>[]) ?? [];
+    const chartData = (data.data as Record<string, unknown>[]) ?? [];
     const lines = (data.lines as Array<{dataKey: string; label: string; color: string}>) ?? [];
 
     if (!chartData.length || !lines.length) {

@@ -100,11 +100,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateW
     console.log(logLine);
     // Also write to file
     try {
-      const fs = require('fs');
-      const path = require('path');
       const logPath = path.join(process.cwd(), '.logs', 'ai-widget-generation.log');
       fs.appendFileSync(logPath, logLine + '\n');
-    } catch (e) {
+    } catch {
       // Silent fail if logging fails
     }
   };

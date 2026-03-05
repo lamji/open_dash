@@ -6,6 +6,25 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "OpenDash — AI-Powered Admin",
   description: "An open-source AI-powered admin dashboard. Build your admin with natural language.",
+  openGraph: {
+    title: "OpenDash — AI-Powered Admin",
+    description: "An open-source AI-powered admin dashboard. Build your admin with natural language.",
+    images: [
+      {
+        url: "/open-dash.png",
+        width: 1200,
+        height: 630,
+        alt: "OpenDash - Build Admin Dashboards with AI",
+      },
+    ],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "OpenDash — AI-Powered Admin",
+    description: "An open-source AI-powered admin dashboard. Build your admin with natural language.",
+    images: ["/open-dash.png"],
+  },
   icons: {
     icon: [
       { url: "/icons/favicon-16x16.png", sizes: "16x16", type: "image/png" },

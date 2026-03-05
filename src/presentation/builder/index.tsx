@@ -986,7 +986,7 @@ export default function BuilderShell() {
                 <div className="bg-slate-50 rounded-lg p-3 space-y-1.5">
                   <p className="text-xs font-semibold text-slate-700">Instructions:</p>
                   <ul className="text-xs text-slate-600 space-y-1 list-disc list-inside">
-                    <li>Enter numbers separated by "/" (e.g., <span className="font-mono font-semibold text-slate-700">{exampleInput}</span>)</li>
+                    <li>Enter numbers separated by &quot;/&quot; (e.g., <span className="font-mono font-semibold text-slate-700">{exampleInput}</span>)</li>
                     <li>Each number represents column width proportionally</li>
                     <li>Tip: Use numbers that sum to 12 for easier calculation</li>
                     <li>Max total value: 12</li>
