@@ -202,20 +202,7 @@ export default function LandingPage() {
               </p>
             </div>
 
-            {/* Floating Cards - Positioned Absolutely */}
-            {/* Trophy/Badge Card - Top Left */}
-            <Card className="absolute left-0 top-32 z-20 w-48 border-blue-100 bg-white p-4 shadow-xl">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-yellow-100">
-                  <span className="text-2xl">🏆</span>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-blue-600">#1</p>
-                  <p className="text-sm font-semibold text-blue-900">Best website using</p>
-                  <p className="text-xs text-blue-600">AI for E-Commerce</p>
-                </div>
-              </div>
-            </Card>
+        
 
             {/* Main Dashboard Mockup - Right Side */}
             <div className="absolute right-0 top-0 z-10 w-80">

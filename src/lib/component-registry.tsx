@@ -525,15 +525,6 @@ function BarChartBlock({ config }: { config: BarChartConfig }) {
       configKeys: Object.keys(config)
     };
     console.log('[BarChartBlock] Rendering with config:', logData);
-
-    try {
-      const fs = require('fs');
-      const path = require('path');
-      const logPath = path.join(process.cwd(), '.logs', 'component-render.log');
-      fs.appendFileSync(logPath, `[BarChartBlock] ${JSON.stringify(logData)}\n`);
-    } catch (e) {
-      // Silent fail
-    }
   }, [config]);
 
   // Early return if missing critical data
@@ -612,15 +603,6 @@ function LineChartBlock({ config }: { config: LineChartConfig }) {
       configKeys: Object.keys(config)
     };
     console.log('[LineChartBlock] Rendering with config:', logData);
-
-    try {
-      const fs = require('fs');
-      const path = require('path');
-      const logPath = path.join(process.cwd(), '.logs', 'component-render.log');
-      fs.appendFileSync(logPath, `[LineChartBlock] ${JSON.stringify(logData)}\n`);
-    } catch (e) {
-      // Silent fail
-    }
   }, [config]);
 
   // Early return if missing critical data
