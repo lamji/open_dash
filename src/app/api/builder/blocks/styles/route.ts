@@ -23,12 +23,13 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { blockId, slotIdx, css, layoutId, blocks } = body as {
+    const { blockId, slotIdx, css, layoutId, blocks, gridRatio } = body as {
       blockId: string;
       slotIdx: number;
       css: string;
       layoutId?: string;
       blocks?: LayoutBlock[];
+      gridRatio?: string;
     };
 
     if (!blockId || typeof slotIdx !== "number") {
@@ -83,7 +84,11 @@ export async function PATCH(request: NextRequest) {
     while (styles.length <= slotIdx) styles.push("");
     styles[slotIdx] = css;
 
-    layout[blockIdx] = { ...block, columnStyles: styles };
+    layout[blockIdx] = {
+      ...block,
+      columnStyles: styles,
+      ...(gridRatio !== undefined ? { gridRatio } : {})
+    };
 
     await prisma.dashboardLayout.update({
       where: { id: finalLayoutId },

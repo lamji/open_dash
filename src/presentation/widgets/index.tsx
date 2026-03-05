@@ -2,6 +2,18 @@
 
 import React, { useState } from "react";
 import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend as RechartsLegend,
+  ResponsiveContainer,
+} from "recharts";
+import {
   useReactTable,
   getCoreRowModel,
   flexRender,
@@ -17,6 +29,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { DynamicIcon } from "@/lib/component-registry";
 import { useWidgets } from "./useWidgets";
 import type { WidgetCategoryInfo, WidgetCategory } from "@/domain/widgets/types";
 import type { WidgetTemplate } from "./useWidgets";
@@ -164,9 +177,11 @@ function KpiCard({ data, iconEl }: { data: PD; iconEl: React.ReactElement }) {
   const trend = (data.trend as string) ?? "";
   const up = (data.trendUp as boolean) ?? true;
   const period = (data.period as string) ?? "";
+  const iconName = (data.icon as string | undefined) ?? null;
+  const resolvedIcon = iconName ? <DynamicIcon name={iconName} className="w-5 h-5 text-slate-400" /> : iconEl;
   return (
-    <div className="flex flex-col h-full justify-between">
-      <div className="flex items-center justify-between">{iconEl}<span className="text-xs text-slate-400 font-medium">{period}</span></div>
+    <div className="flex flex-col h-full gap-3">
+      <div className="flex items-center justify-between">{resolvedIcon}<span className="text-xs text-slate-400 font-medium">{period}</span></div>
       <div><p className="text-2xl font-bold text-slate-900">{v}</p><p className="text-xs text-slate-500 mt-0.5">{label}</p></div>
       {trend && (
         <div className={`flex items-center gap-1.5 ${up ? "text-emerald-600 bg-emerald-50" : "text-red-500 bg-red-50"} rounded-md px-2 py-1 w-fit`}>
@@ -348,9 +363,11 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const label = (data.label as string) ?? "Page Views";
     const bars = (data.bars as number[]) ?? [30,45,35,60,50,70,65,80,75,85,90,95];
     const period = (data.period as string) ?? "Today";
+    const iconName = (data.icon as string | undefined) ?? null;
+    const iconEl = iconName ? <DynamicIcon name={iconName} className="w-5 h-5 text-slate-400" /> : <Zap className="w-5 h-5 text-slate-400" />;
     return (
-      <div className="flex flex-col h-full justify-between">
-        <div className="flex items-center justify-between"><Zap className="w-5 h-5 text-slate-400" /><span className="text-xs text-slate-400 font-medium">{period}</span></div>
+      <div className="flex flex-col h-full gap-3">
+        <div className="flex items-center justify-between">{iconEl}<span className="text-xs text-slate-400 font-medium">{period}</span></div>
         <div><p className="text-2xl font-bold text-slate-900">{v}</p><p className="text-xs text-slate-500 mt-0.5">{label}</p></div>
         <div className="flex items-end gap-0.5 h-10 mt-1">{bars.map((h,i)=><div key={i} className="flex-1 bg-blue-400 rounded-sm" style={{height:`${h}%`}} />)}</div>
       </div>
@@ -362,9 +379,11 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const label = (data.label as string) ?? "Customer Satisfaction";
     const filled = (data.filledStars as number) ?? 4;
     const reviews = (data.reviews as number) ?? 1234;
+    const iconName = (data.icon as string | undefined) ?? null;
+    const iconEl = iconName ? <DynamicIcon name={iconName} className="w-5 h-5 text-yellow-400" /> : <Star className="w-5 h-5 text-yellow-400 fill-yellow-400" />;
     return (
-      <div className="flex flex-col h-full justify-between">
-        <div className="flex items-center justify-between"><Star className="w-5 h-5 text-yellow-400 fill-yellow-400" /><span className="text-xs text-slate-400">{reviews.toLocaleString()} reviews</span></div>
+      <div className="flex flex-col h-full gap-3">
+        <div className="flex items-center justify-between">{iconEl}<span className="text-xs text-slate-400">{reviews.toLocaleString()} reviews</span></div>
         <div><p className="text-2xl font-bold text-slate-900">{v} / 5.0</p><p className="text-xs text-slate-500 mt-0.5">{label}</p></div>
         <div className="flex gap-0.5">{[1,2,3,4,5].map(s=><Star key={s} className={`w-4 h-4 ${s<=filled?"text-yellow-400 fill-yellow-400":"text-slate-200"}`}/>)}</div>
       </div>
@@ -375,9 +394,11 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const v = (data.value as string) ?? "1,234";
     const label = (data.label as string) ?? "Active Users Now";
     const period = (data.period as string) ?? "Online right now";
+    const iconName = (data.icon as string | undefined) ?? null;
+    const iconEl = iconName ? <DynamicIcon name={iconName} className="w-5 h-5 text-slate-400" /> : <Users className="w-5 h-5 text-slate-400" />;
     return (
-      <div className="flex flex-col h-full justify-between">
-        <div className="flex items-center justify-between"><Users className="w-5 h-5 text-slate-400" /><div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" /><span className="text-xs text-green-600 font-medium">Live</span></div></div>
+      <div className="flex flex-col h-full gap-3">
+        <div className="flex items-center justify-between">{iconEl}<div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" /><span className="text-xs text-green-600 font-medium">Live</span></div></div>
         <div><p className="text-2xl font-bold text-slate-900">{v}</p><p className="text-xs text-slate-500 mt-0.5">{label}</p></div>
         <div className="flex items-center gap-1.5 text-green-600 bg-green-50 rounded-md px-2 py-1 w-fit"><Activity className="w-3.5 h-3.5" /><span className="text-xs font-semibold">{period}</span></div>
       </div>
@@ -400,11 +421,13 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const bars = (data.bars as number[]) ?? [50,65,80,100,75,90];
     const labels = (data.labels as string[]) ?? ["Jan","Feb","Mar","Apr","May","Jun"];
     const title = (data.title as string) ?? "Monthly Revenue";
+    const iconName = (data.icon as string | undefined) ?? null;
+    const iconEl = iconName ? <DynamicIcon name={iconName} className="w-4 h-4 text-violet-500" /> : <BarChart3 className="w-4 h-4 text-violet-500" />;
     return (
       <div className="flex flex-col h-full gap-2">
-        <div className="flex items-center justify-between"><p className="text-sm font-bold text-slate-800">{title}</p><BarChart3 className="w-4 h-4 text-violet-500" /></div>
-        <div className="flex items-end gap-1.5 h-20 mt-1">{bars.map((h,i)=><div key={i} className="flex-1 rounded-t-sm" style={{height:`${h}%`,background:`hsl(${255+i*8},70%,${50+i*3}%)`}} />)}</div>
-        <div className="flex justify-between text-xs text-slate-400 px-0.5">{labels.map(m=><span key={m}>{m}</span>)}</div>
+        <div className="flex items-center justify-between flex-shrink-0"><p className="text-sm font-bold text-slate-800">{title}</p>{iconEl}</div>
+        <div className="flex items-end gap-1.5 flex-1 min-h-[60px] mt-1">{bars.map((h,i)=><div key={i} className="flex-1 rounded-t-sm" style={{height:`${h}%`,background:`hsl(${255+i*8},70%,${50+i*3}%)`}} />)}</div>
+        <div className="flex justify-between text-xs text-slate-400 px-0.5 flex-shrink-0">{labels.map(m=><span key={m}>{m}</span>)}</div>
       </div>
     );
   },
@@ -412,10 +435,12 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
   "activity-chart": (data) => {
     const bars = (data.bars as number[]) ?? [40,60,45,80,55,70,65,85,75,90,80,95];
     const title = (data.title as string) ?? "User Activity";
+    const iconName = (data.icon as string | undefined) ?? null;
+    const iconEl = iconName ? <DynamicIcon name={iconName} className="w-4 h-4 text-blue-500" /> : <Activity className="w-4 h-4 text-blue-500" />;
     return (
       <div className="flex flex-col h-full gap-2">
-        <div className="flex items-center justify-between"><p className="text-sm font-bold text-slate-800">{title}</p><Activity className="w-4 h-4 text-blue-500" /></div>
-        <div className="flex items-end gap-0.5 h-20">{bars.map((h,i)=><div key={i} className="flex-1 rounded-t-sm bg-gradient-to-t from-blue-600 to-blue-300" style={{height:`${h}%`}} />)}</div>
+        <div className="flex items-center justify-between flex-shrink-0"><p className="text-sm font-bold text-slate-800">{title}</p>{iconEl}</div>
+        <div className="flex items-end gap-0.5 flex-1 min-h-[60px]">{bars.map((h,i)=><div key={i} className="flex-1 rounded-t-sm bg-gradient-to-t from-blue-600 to-blue-300" style={{height:`${h}%`}} />)}</div>
       </div>
     );
   },
@@ -423,11 +448,13 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
   "traffic-pie": (data) => {
     const segments = (data.segments as {label:string;value:string;pct:number;color:string}[]) ?? [{label:"Direct",value:"45%",pct:45,color:"#6366f1"},{label:"Organic",value:"30%",pct:30,color:"#a855f7"},{label:"Social",value:"25%",pct:25,color:"#ec4899"}];
     const title = (data.title as string) ?? "Traffic Sources";
+    const iconName = (data.icon as string | undefined) ?? null;
+    const iconEl = iconName ? <DynamicIcon name={iconName} className="w-4 h-4 text-indigo-500" /> : <PieChart className="w-4 h-4 text-indigo-500" />;
     let pcts = 0;
     const conic = segments.map(s=>{const start=pcts;pcts+=s.pct;return `${s.color} ${start}% ${pcts}%`;}).join(",");
     return (
-      <div className="flex flex-col h-full justify-between">
-        <div className="flex items-center justify-between"><p className="text-sm font-bold text-slate-800">{title}</p><PieChart className="w-4 h-4 text-indigo-500" /></div>
+      <div className="flex flex-col h-full gap-3">
+        <div className="flex items-center justify-between"><p className="text-sm font-bold text-slate-800">{title}</p>{iconEl}</div>
         <div className="flex items-center gap-3 flex-1">
           <div className="aspect-square h-full max-h-24 rounded-full flex-shrink-0" style={{background:`conic-gradient(${conic})`}} />
           <div className="space-y-1 flex-1">{segments.map(s=><div key={s.label} className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full flex-shrink-0" style={{background:s.color}} /><span className="text-xs text-slate-600">{s.label}</span><span className="text-xs font-semibold ml-auto">{s.value}</span></div>)}</div>
@@ -440,9 +467,11 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const cells = (data.cells as number) ?? 35;
     const palette = (data.palette as string[]) ?? ["bg-slate-100","bg-emerald-200","bg-emerald-400","bg-emerald-600"];
     const title = (data.title as string) ?? "Performance Heatmap";
+    const iconName = (data.icon as string | undefined) ?? null;
+    const iconEl = iconName ? <DynamicIcon name={iconName} className="w-4 h-4 text-orange-500" /> : <Calendar className="w-4 h-4 text-orange-500" />;
     return (
       <div className="flex flex-col h-full gap-2">
-        <div className="flex items-center justify-between"><p className="text-sm font-bold text-slate-800">{title}</p><Calendar className="w-4 h-4 text-orange-500" /></div>
+        <div className="flex items-center justify-between"><p className="text-sm font-bold text-slate-800">{title}</p>{iconEl}</div>
         <div className="grid grid-cols-7 gap-0.5">{Array.from({length:cells},(_,i)=><div key={i} className={`aspect-square rounded-sm ${palette[i%palette.length]}`} />)}</div>
       </div>
     );
@@ -452,14 +481,23 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const points = (data.points as number[]) ?? [20,35,28,45,38,55,48,62,55,70,65,78];
     const labels = (data.labels as string[]) ?? [];
     const title = (data.title as string) ?? "Revenue Trend";
-    const max = Math.max(...points);
+    const iconName = (data.icon as string | undefined) ?? null;
+    const iconEl = iconName ? <DynamicIcon name={iconName} className="w-4 h-4 text-emerald-500" /> : <TrendingUp className="w-4 h-4 text-emerald-500" />;
+    const chartData = points.map((p, i) => ({ name: labels[i] ?? `${i + 1}`, value: p }));
     return (
       <div className="flex flex-col h-full gap-2">
-        <div className="flex items-center justify-between"><p className="text-sm font-bold text-slate-800">{title}</p><TrendingUp className="w-4 h-4 text-emerald-500" /></div>
-        <div className="relative h-16 flex items-end gap-1">
-          {points.map((p,i)=><div key={i} className="flex-1 bg-emerald-400 rounded-t-sm opacity-80" style={{height:`${(p/max)*100}%`}} />)}
+        <div className="flex items-center justify-between flex-shrink-0"><p className="text-sm font-bold text-slate-800">{title}</p>{iconEl}</div>
+        <div className="flex-1 min-h-[100px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="name" tick={{ fontSize: 8, fill: "#94a3b8" }} interval="preserveStartEnd" hide />
+              <YAxis tick={{ fontSize: 8, fill: "#94a3b8" }} width={20} />
+              <RechartsTooltip contentStyle={{ fontSize: 11, padding: "4px 8px" }} />
+              <Line type="monotone" dataKey="value" name={title} stroke="#10b981" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
-        {labels.length > 0 && <div className="flex justify-between text-xs text-slate-400">{[labels[0],labels[Math.floor(labels.length/2)],labels[labels.length-1]].map(l=><span key={l}>{l}</span>)}</div>}
       </div>
     );
   },
@@ -467,11 +505,13 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
   "area-traffic": (data) => {
     const points = (data.points as number[]) ?? [30,45,35,60,50,70,65,80,75,90];
     const title = (data.title as string) ?? "Website Traffic";
+    const iconName = (data.icon as string | undefined) ?? null;
+    const iconEl = iconName ? <DynamicIcon name={iconName} className="w-4 h-4 text-cyan-500" /> : <BarChart3 className="w-4 h-4 text-cyan-500" />;
     const max = Math.max(...points);
     return (
       <div className="flex flex-col h-full gap-2">
-        <div className="flex items-center justify-between"><p className="text-sm font-bold text-slate-800">{title}</p><BarChart3 className="w-4 h-4 text-cyan-500" /></div>
-        <div className="flex items-end gap-0.5 h-16">{points.map((p,i)=><div key={i} className="flex-1 bg-gradient-to-t from-cyan-600 to-cyan-200 rounded-t-sm" style={{height:`${(p/max)*100}%`}} />)}</div>
+        <div className="flex items-center justify-between flex-shrink-0"><p className="text-sm font-bold text-slate-800">{title}</p>{iconEl}</div>
+        <div className="flex items-end gap-0.5 flex-1 min-h-[60px]">{points.map((p,i)=><div key={i} className="flex-1 bg-gradient-to-t from-cyan-600 to-cyan-200 rounded-t-sm" style={{height:`${(p/max)*100}%`}} />)}</div>
       </div>
     );
   },
@@ -479,11 +519,13 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
   "donut-budget": (data) => {
     const segments = (data.segments as {label:string;value:number;color:string}[]) ?? [{label:"Engineering",value:40,color:"#6366f1"},{label:"Marketing",value:35,color:"#a855f7"},{label:"Sales",value:15,color:"#ec4899"},{label:"Other",value:10,color:"#f59e0b"}];
     const title = (data.title as string) ?? "Budget Allocation";
+    const iconName = (data.icon as string | undefined) ?? null;
+    const iconEl = iconName ? <DynamicIcon name={iconName} className="w-4 h-4 text-violet-500" /> : <PieChart className="w-4 h-4 text-violet-500" />;
     let pcts = 0;
     const conic = segments.map(s=>{const start=pcts;pcts+=s.value;return `${s.color} ${start}% ${pcts}%`;}).join(",");
     return (
       <div className="flex flex-col h-full gap-2">
-        <div className="flex items-center justify-between"><p className="text-sm font-bold text-slate-800">{title}</p><PieChart className="w-4 h-4 text-violet-500" /></div>
+        <div className="flex items-center justify-between"><p className="text-sm font-bold text-slate-800">{title}</p>{iconEl}</div>
         <div className="flex items-center gap-3">
           <div className="relative w-14 h-14 flex-shrink-0">
             <div className="w-14 h-14 rounded-full" style={{background:`conic-gradient(${conic})`}} />
@@ -534,7 +576,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const targetLabel = (data.targetLabel as string) ?? "$100,000";
     const label = (data.label as string) ?? "Sales Target";
     return (
-      <div className="flex flex-col h-full justify-between">
+      <div className="flex flex-col h-full gap-3">
         <div className="flex items-center justify-between"><p className="text-sm font-bold text-slate-800">{label}</p><Target className="w-4 h-4 text-emerald-500" /></div>
         <div className="flex justify-between text-xs text-slate-500"><span>{currentLabel}</span><span className="font-semibold text-slate-700">{targetLabel}</span></div>
         <Progress value={pct} className="h-2.5" />
@@ -572,7 +614,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const pct = (data.pct as number) ?? Math.round((done/total)*100);
     const daysLeft = (data.daysLeft as number) ?? 3;
     return (
-      <div className="flex flex-col h-full justify-between">
+      <div className="flex flex-col h-full gap-3">
         <div className="flex items-center justify-between"><p className="text-sm font-bold text-slate-800">{sprint}</p><span className="text-xs text-orange-500 font-medium">{daysLeft}d left</span></div>
         <Progress value={pct} className="h-3" />
         <div className="flex justify-between text-xs text-slate-500"><span>{done} tasks done</span><span>{total-done} remaining</span></div>
@@ -661,7 +703,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const targetLabel = (data.targetLabel as string) ?? "$100,000";
     const remaining = (data.remaining as string) ?? "$15,000 to go";
     return (
-      <div className="flex flex-col h-full justify-between">
+      <div className="flex flex-col h-full gap-3">
         <div className="flex items-center justify-between"><p className="text-sm font-bold text-slate-800">Revenue vs Target</p><Target className="w-4 h-4 text-pink-500" /></div>
         <div className="space-y-1.5"><div className="flex justify-between text-xs"><span className="text-slate-500">Actual</span><span className="font-bold text-emerald-600">{actualLabel}</span></div><div className="flex justify-between text-xs"><span className="text-slate-500">Target</span><span className="font-bold text-slate-800">{targetLabel}</span></div></div>
         <Progress value={pct} className="h-2" />
@@ -772,7 +814,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const period = (data.period as string) ?? "Last 7 days";
     const max = Math.max(...bars,1);
     return (
-      <div className="flex flex-col h-full justify-between">
+      <div className="flex flex-col h-full gap-3">
         <div className="flex items-center justify-between"><p className="text-sm font-bold text-slate-800">{label}</p><AlertTriangle className="w-4 h-4 text-red-500" /></div>
         <div><p className="text-2xl font-bold text-slate-900">{v}</p><p className="text-xs text-slate-400 mt-0.5">{period}</p></div>
         <div className="flex items-end gap-1 h-8">{bars.map((b,i)=><div key={i} className="flex-1 rounded-sm bg-red-400" style={{height:`${(b/max)*100}%`}} />)}</div>
@@ -888,7 +930,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const label = (data.label as string) ?? "Save Changes";
     const description = (data.description as string) ?? "Primary action button";
     return (
-      <div className="flex flex-col h-full justify-between" data-test-id="primary-button-container">
+      <div className="flex flex-col h-full gap-3" data-test-id="primary-button-container">
         <p className="text-xs text-slate-400" data-test-id="primary-button-desc">{description}</p>
         <button className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg" data-test-id="primary-button-btn">{label}</button>
       </div>
@@ -898,7 +940,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
   "button-group": (data) => {
     const buttons = (data.buttons as {label:string;variant:string}[]) ?? [{label:"Edit",variant:"outline"},{label:"Share",variant:"outline"},{label:"Delete",variant:"destructive"}];
     return (
-      <div className="flex flex-col h-full justify-between" data-test-id="button-group-container">
+      <div className="flex flex-col h-full gap-3" data-test-id="button-group-container">
         <p className="text-xs text-slate-500" data-test-id="button-group-label">Action Group</p>
         <div className="flex gap-1 flex-wrap" data-test-id="button-group-row">
           {buttons.map((btn,i)=>(
@@ -938,7 +980,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
   "split-button": (data) => {
     const label = (data.label as string) ?? "Export";
     return (
-      <div className="flex flex-col h-full justify-between" data-test-id="split-button-container">
+      <div className="flex flex-col h-full gap-3" data-test-id="split-button-container">
         <p className="text-xs text-slate-500" data-test-id="split-button-label">Split Button</p>
         <div className="flex w-fit" data-test-id="split-button-wrapper">
           <button className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-l-lg border-r border-blue-700" data-test-id="split-button-main">{label}</button>
@@ -1076,7 +1118,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const placeholder = (data.placeholder as string) ?? "Search anything...";
     console.log(`Debug flow: search-bar preview fired with`, { placeholder });
     return (
-      <div className="flex flex-col h-full justify-between" data-test-id="search-bar-container">
+      <div className="flex flex-col h-full gap-3" data-test-id="search-bar-container">
         <div className="flex items-center gap-2 px-3 py-2.5 border border-slate-200 rounded-lg bg-white shadow-sm" data-test-id="search-bar-input-wrapper">
           <Search className="w-4 h-4 text-slate-400 flex-shrink-0" data-test-id="search-bar-icon" />
           <span className="text-sm text-slate-400 flex-1" data-test-id="search-bar-input">{placeholder}</span>
@@ -1211,7 +1253,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const max = (data.max as number) ?? 5;
     const labels = (data.labels as string[]) ?? ["Poor","Fair","Good","Very Good","Excellent"];
     return (
-      <div className="flex flex-col h-full justify-between" data-test-id="rating-widget-container">
+      <div className="flex flex-col h-full gap-3" data-test-id="rating-widget-container">
         <label className="text-xs font-medium text-slate-700" data-test-id="rating-widget-label">{label}</label>
         <div className="flex gap-1" data-test-id="rating-widget-stars">
           {[...Array(max)].map((_,i)=>(
@@ -1225,6 +1267,82 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
           {labels.map((lbl,i)=>(
             <div key={i} className={`flex-1 h-1.5 rounded-full ${i<value?"bg-yellow-400":"bg-slate-200"}`} data-test-id={`rating-widget-scale-bar-${i}`} title={lbl} />
           ))}
+        </div>
+      </div>
+    );
+  },
+
+  // ── RECHARTS-BASED CHARTS (For AI-generated widgets) ─────────
+  "chart-bar": (data) => {
+    const title = (data.title as string) ?? "Bar Chart";
+    const xKey = (data.xKey as string) ?? "name";
+    const chartData = (data.data as Record<string, any>[]) ?? [];
+    const bars = (data.bars as Array<{dataKey: string; label: string; color: string}>) ?? [];
+
+    if (!chartData.length || !bars.length) {
+      return <div className="text-xs text-slate-400">No data</div>;
+    }
+
+    return (
+      <div className="flex flex-col h-full gap-2">
+        <div className="flex items-center justify-between flex-shrink-0">
+          <p className="text-sm font-bold text-slate-800">{title}</p>
+          <BarChart3 className="w-4 h-4 text-violet-500" />
+        </div>
+        <div className="flex-1 min-h-[100px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey={xKey} tick={{ fontSize: 8, fill: "#94a3b8" }} />
+              <YAxis tick={{ fontSize: 8, fill: "#94a3b8" }} width={20} />
+              <RechartsTooltip contentStyle={{ fontSize: 11, padding: "4px 8px" }} />
+              {bars.map((bar) => (
+                <Bar key={bar.dataKey} dataKey={bar.dataKey} name={bar.label} fill={bar.color} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    );
+  },
+
+  "chart-line": (data) => {
+    const title = (data.title as string) ?? "Line Chart";
+    const xKey = (data.xKey as string) ?? "name";
+    const chartData = (data.data as Record<string, any>[]) ?? [];
+    const lines = (data.lines as Array<{dataKey: string; label: string; color: string}>) ?? [];
+
+    if (!chartData.length || !lines.length) {
+      return <div className="text-xs text-slate-400">No data</div>;
+    }
+
+    return (
+      <div className="flex flex-col h-full gap-2">
+        <div className="flex items-center justify-between flex-shrink-0">
+          <p className="text-sm font-bold text-slate-800">{title}</p>
+          <TrendingUp className="w-4 h-4 text-emerald-500" />
+        </div>
+        <div className="flex-1 min-h-[100px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey={xKey} tick={{ fontSize: 8, fill: "#94a3b8" }} />
+              <YAxis tick={{ fontSize: 8, fill: "#94a3b8" }} width={20} />
+              <RechartsTooltip contentStyle={{ fontSize: 11, padding: "4px 8px" }} />
+              {lines.map((line) => (
+                <Line
+                  key={line.dataKey}
+                  type="monotone"
+                  dataKey={line.dataKey}
+                  name={line.label}
+                  stroke={line.color}
+                  strokeWidth={2}
+                  dot={{ r: 2 }}
+                  activeDot={{ r: 4 }}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </div>
     );

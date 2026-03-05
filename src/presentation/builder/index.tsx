@@ -27,6 +27,7 @@ import { useBuilder, BUILDER_CATEGORIES } from "./useBuilder";
 import { WIDGET_PREVIEWS, WIDGET_CATEGORIES } from "@/presentation/widgets";
 import type { LayoutType, CodeEditorTab } from "@/domain/builder/types";
 import { DASHBOARD_TEMPLATES } from "@/lib/dashboard-templates";
+import { WidgetPickerCard } from "@/components/widgets/widget-picker-card";
 
 const LAYOUT_OPTIONS: { type: LayoutType; label: string; cols: number }[] = [
   { type: "single",  label: "Single Column", cols: 1 },
@@ -216,6 +217,10 @@ export default function BuilderShell() {
     sendGroqMessage,
     applyTemplate,
     generateAiWidget,
+    gridRatioModal,
+    openGridRatioModal,
+    closeGridRatioModal,
+    saveGridRatio,
   } = useBuilder();
 
   const [selectedSlot, setSelectedSlot] = useState<{ blockId: string; slotIdx: number } | null>(null);
@@ -226,6 +231,8 @@ export default function BuilderShell() {
   const [groqInput, setGroqInput] = useState("");
   const [aiWidgetPrompts, setAiWidgetPrompts] = useState<Record<string, string>>({});
   const [aiWidgetLoading, setAiWidgetLoading] = useState<string | null>(null);
+  const [gridRatioInput, setGridRatioInput] = useState("");
+  const [gridRatioError, setGridRatioError] = useState("");
   const groqInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -401,6 +408,7 @@ export default function BuilderShell() {
               <div
                 key={block.id}
                 className=""
+                style={cssStringToStyle(block.blockStyles ?? "")}
                 data-test-id={`builder-block-${block.id}`}
               >
                 {!previewMode && (
@@ -421,13 +429,23 @@ export default function BuilderShell() {
                         <Sparkles className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => { openCssEditor(block.id, 0); setCssEditorDraft(block.columnStyles?.[0] ?? ""); }}
+                        onClick={() => { openCssEditor(block.id); setCssEditorDraft(block.blockStyles ?? ""); }}
                         className="text-slate-400 hover:text-blue-500 transition-colors"
                         title="Edit block styles"
                         data-test-id={`builder-block-edit-${block.id}`}
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
+                      {block.slots.length > 1 && (
+                        <button
+                          onClick={() => openGridRatioModal(block.id)}
+                          className="text-slate-400 hover:text-green-500 transition-colors"
+                          title="Set column ratio"
+                          data-test-id={`builder-block-ratio-${block.id}`}
+                        >
+                          <LayoutGrid className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button
                         onClick={() => removeBlock(block.id)}
                         className="text-slate-400 hover:text-red-500 transition-colors"
@@ -438,7 +456,7 @@ export default function BuilderShell() {
                     </div>
                   </div>
                 )}
-                <div className={`grid gap-4 ${GRID_CLASS[block.type] ?? "grid-cols-1"}`} data-test-id={`builder-block-grid-${block.id}`}>
+                <div className={`grid gap-4 ${block.gridRatio ? "" : GRID_CLASS[block.type] ?? "grid-cols-1"}`} style={block.gridRatio ? { gridTemplateColumns: block.gridRatio } : undefined} data-test-id={`builder-block-grid-${block.id}`}>
                   {block.slots.map((widget, slotIdx) => {
                     const slotStyle = cssStringToStyle(block.columnStyles?.[slotIdx] ?? "");
                     const hasCustomStyle = Object.keys(slotStyle).length > 0;
@@ -450,9 +468,9 @@ export default function BuilderShell() {
                         data-test-id={`builder-slot-${block.id}-${slotIdx}`}
                       >
                         {widget ? (
-                          <div className="h-full" data-test-id={`builder-slot-filled-${block.id}-${slotIdx}`}>
+                          <div className="flex flex-col h-full" data-test-id={`builder-slot-filled-${block.id}-${slotIdx}`}>
                             {!previewMode && (
-                              <div className="flex items-center justify-between mb-2" data-test-id={`builder-slot-header-${block.id}-${slotIdx}`}>
+                              <div className="flex items-center justify-between mb-2 flex-shrink-0" data-test-id={`builder-slot-header-${block.id}-${slotIdx}`}>
                                 <span className="text-xs font-semibold text-slate-500 truncate">{widget.title}</span>
                                 <div className="flex items-center gap-1">
                                   <button
@@ -496,7 +514,7 @@ export default function BuilderShell() {
                                 </div>
                               </div>
                             )}
-                            <div className="w-full h-full" data-test-id={`builder-slot-widget-${block.id}-${slotIdx}`}>
+                            <div className="w-full flex-1 min-h-0" data-test-id={`builder-slot-widget-${block.id}-${slotIdx}`}>
                               {WIDGET_PREVIEWS[widget.widgetId]
                                 ? WIDGET_PREVIEWS[widget.widgetId](widget.widgetData)
                                 : <span className="text-slate-400 text-xs">No preview</span>
@@ -650,49 +668,36 @@ export default function BuilderShell() {
 
       {/* ── Modal: Widget Variant Picker ── */}
       <Dialog open={!!showWidgetVariantPicker} onOpenChange={closeWidgetVariantPicker}>
-        <DialogContent className="max-w-3xl bg-white" data-test-id="builder-variant-picker-modal">
-          <DialogHeader>
+        <DialogContent className="flex h-[calc(100vh-2rem)] min-w-[calc(100vw-2rem)] flex-col gap-0 p-0 bg-white overflow-hidden" data-test-id="builder-variant-picker-modal">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b bg-white flex-shrink-0">
             <DialogTitle>
               {showWidgetVariantPicker
                 ? `Choose a ${WIDGET_CATEGORIES.find(c => c.id === showWidgetVariantPicker.category)?.label ?? showWidgetVariantPicker.category} widget`
                 : "Choose widget"}
             </DialogTitle>
           </DialogHeader>
-          {loadingTemplates ? (
-            <div className="flex items-center justify-center h-40 text-slate-400 text-sm" data-test-id="builder-variant-loading">Loading widgets…</div>
-          ) : variantTemplates.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-40 gap-2" data-test-id="builder-variant-empty">
-              <p className="text-slate-500 text-sm">No widgets found for this category.</p>
-              <Badge variant="secondary">Try seeding the DB with widgets</Badge>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mt-2 max-h-[440px] overflow-y-auto pr-1" data-test-id="builder-variant-grid">
-              {variantTemplates.map((template) => (
-                <button
-                  key={template.slug}
-                  onClick={() => {
+          <div className="flex-1 overflow-y-auto">
+            {loadingTemplates ? (
+              <div className="flex items-center justify-center h-40 text-slate-400 text-sm" data-test-id="builder-variant-loading">Loading widgets…</div>
+            ) : variantTemplates.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-40 gap-2" data-test-id="builder-variant-empty">
+                <p className="text-slate-500 text-sm">No widgets found for this category.</p>
+                <Badge variant="secondary">Try seeding the DB with widgets</Badge>
+              </div>
+            ) : (
+              <div className="p-6" data-test-id="builder-variant-grid">
+                <WidgetPickerCard
+                  templates={variantTemplates}
+                  onSelect={(template) => {
                     if (showWidgetVariantPicker) {
                       placeWidget(showWidgetVariantPicker.blockId, showWidgetVariantPicker.slotIdx, template);
                     }
                     setSelectedSlot(null);
                   }}
-                  className="border border-slate-200 rounded-xl overflow-hidden hover:border-blue-400 hover:shadow-md transition-all text-left group"
-                  data-test-id={`builder-widget-variant-${template.slug}`}
-                >
-                  <div className="p-3 bg-slate-50 overflow-hidden h-28" data-test-id={`builder-widget-variant-preview-${template.slug}`}>
-                    {WIDGET_PREVIEWS[template.slug]
-                      ? WIDGET_PREVIEWS[template.slug](template.widgetData ?? {})
-                      : <div className="flex items-center justify-center h-full text-slate-400 text-xs">Preview</div>
-                    }
-                  </div>
-                  <div className="px-3 py-2 border-t border-slate-100" data-test-id={`builder-widget-variant-info-${template.slug}`}>
-                    <p className="text-xs font-semibold text-slate-700 group-hover:text-blue-700 truncate">{template.title}</p>
-                    <p className="text-[10px] text-slate-400 truncate">{template.slug}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
+                />
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -774,9 +779,11 @@ export default function BuilderShell() {
               <div className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
             </div>
             <span className="text-xs text-slate-400 px-3 py-2 font-mono">
-              {cssEditorState?.widgetTitle
-                ? `${cssEditorState.widgetTitle} — Column ${(cssEditorState?.slotIdx ?? 0) + 1}`
-                : `styles.css — Column ${(cssEditorState?.slotIdx ?? 0) + 1}`
+              {cssEditorState?.slotIdx === -1
+                ? `Block Container Styles (No widget selected)`
+                : cssEditorState?.widgetTitle
+                  ? `${cssEditorState.widgetTitle} (Widget) — Column ${(cssEditorState?.slotIdx ?? 0) + 1}`
+                  : `Column ${(cssEditorState?.slotIdx ?? 0) + 1} Styles (CSS only)`
               }
             </span>
           </div>
@@ -903,6 +910,89 @@ export default function BuilderShell() {
             </TabsContent>
 
           </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Grid Ratio Modal ── */}
+      <Dialog
+        open={!!gridRatioModal}
+        onOpenChange={(o) => {
+          if (!o) {
+            closeGridRatioModal();
+            setGridRatioInput("");
+            setGridRatioError("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm bg-white">
+          <DialogHeader>
+            <DialogTitle>Custom Column Ratio</DialogTitle>
+          </DialogHeader>
+          {(() => {
+            const block = gridRatioModal && blocks.find(b => b.id === gridRatioModal.blockId);
+            const columnCount = block?.slots.length ?? 2;
+            const exampleInput = columnCount === 2 ? "2/8" : columnCount === 3 ? "5/2/5" : "4/4/2/2";
+
+            const handleApply = () => {
+              setGridRatioError("");
+              const parts = gridRatioInput.trim().split("/").filter(p => p.trim());
+
+              if (parts.length !== columnCount) {
+                setGridRatioError(`Enter ${columnCount} numbers separated by "/" (e.g., ${exampleInput})`);
+                return;
+              }
+
+              const numbers = parts.map(p => parseFloat(p.trim()));
+              if (numbers.some(n => isNaN(n) || n <= 0)) {
+                setGridRatioError("All values must be positive numbers");
+                return;
+              }
+
+              const total = numbers.reduce((sum, n) => sum + n, 0);
+              if (total > 12) {
+                setGridRatioError("Sum cannot exceed 12");
+                return;
+              }
+
+              const frValue = numbers.map(n => `${n}fr`).join(" ");
+              gridRatioModal && saveGridRatio(gridRatioModal.blockId, frValue);
+              setGridRatioInput("");
+              setGridRatioError("");
+            };
+
+            return (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-2">Ratio ({columnCount} columns)</label>
+                  <Input
+                    value={gridRatioInput}
+                    onChange={(e) => { setGridRatioInput(e.target.value); setGridRatioError(""); }}
+                    onKeyDown={(e) => e.key === "Enter" && handleApply()}
+                    placeholder={exampleInput}
+                    className="text-sm"
+                    data-test-id="builder-grid-ratio-input"
+                  />
+                </div>
+
+                <div className="bg-slate-50 rounded-lg p-3 space-y-1.5">
+                  <p className="text-xs font-semibold text-slate-700">Instructions:</p>
+                  <ul className="text-xs text-slate-600 space-y-1 list-disc list-inside">
+                    <li>Enter numbers separated by "/" (e.g., <span className="font-mono font-semibold text-slate-700">{exampleInput}</span>)</li>
+                    <li>Each number represents column width proportionally</li>
+                    <li>Tip: Use numbers that sum to 12 for easier calculation</li>
+                    <li>Max total value: 12</li>
+                  </ul>
+                </div>
+
+                {gridRatioError && <div className="text-xs text-red-600 font-medium">{gridRatioError}</div>}
+
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={closeGridRatioModal} className="flex-1">Cancel</Button>
+                  <Button size="sm" onClick={handleApply} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white">Apply</Button>
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 

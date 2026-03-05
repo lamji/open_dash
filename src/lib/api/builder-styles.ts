@@ -1,4 +1,4 @@
-import type { GroqChatMessage } from "@/domain/builder/types";
+import type { GroqChatMessage, LayoutBlock } from "@/domain/builder/types";
 
 export interface SaveWidgetDataResponse {
   ok: boolean;
@@ -126,6 +126,28 @@ export async function saveWidgetData(
     return data as SaveWidgetDataResponse;
   } catch (err) {
     console.error(`Debug flow: saveWidgetData error`, err);
+    return { ok: false, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
+export async function saveGridRatio(
+  blockId: string,
+  ratio: string,
+  layoutId?: string,
+  blocks?: LayoutBlock[]
+): Promise<SaveBlockStylesResponse> {
+  console.log(`Debug flow: saveGridRatio fired with`, { blockId, ratio, layoutId, hasBlocks: !!blocks });
+  try {
+    const res = await fetch("/api/builder/blocks/styles", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blockId, slotIdx: -1, css: "", gridRatio: ratio, layoutId, blocks }),
+    });
+    const data = await res.json();
+    console.log(`Debug flow: saveGridRatio response`, { ok: data.ok, layoutId: data.layoutId });
+    return data as SaveBlockStylesResponse;
+  } catch (err) {
+    console.error(`Debug flow: saveGridRatio error`, err);
     return { ok: false, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }

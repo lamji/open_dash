@@ -84,16 +84,34 @@ This project does NOT use Chart.js directly — it uses custom CSS/flex renderin
 
 ### Line / Trend Charts
 
-#### `line-trend` — Line Trend Chart (Revenue Trend)
+#### `chart-line` — Line Trend Chart (Revenue Trend)
 ```json
 {
   "title": "Revenue Trend",
-  "points": [20, 35, 28, 45, 38, 55, 48, 62, 55, 70, 65, 78],
-  "labels": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+  "xKey": "month",
+  "lines": [
+    { "dataKey": "revenue", "label": "Revenue", "color": "#3b82f6" }
+  ],
+  "data": [
+    { "month": "Jan", "revenue": 20 },
+    { "month": "Feb", "revenue": 35 },
+    { "month": "Mar", "revenue": 28 },
+    { "month": "Apr", "revenue": 45 },
+    { "month": "May", "revenue": 38 },
+    { "month": "Jun", "revenue": 55 },
+    { "month": "Jul", "revenue": 48 },
+    { "month": "Aug", "revenue": 62 },
+    { "month": "Sep", "revenue": 55 },
+    { "month": "Oct", "revenue": 70 },
+    { "month": "Nov", "revenue": 65 },
+    { "month": "Dec", "revenue": 78 }
+  ]
 }
 ```
-- `points`: array of numeric values (rendered as vertical bars with emerald color)
-- `labels`: optional array of strings; if empty, no labels shown
+- **IMPORTANT for Recharts:** Use `data` array with objects, `xKey` for X-axis, and `lines` array with dataKey/label/color
+- `data`: array of objects where each object has the xKey property and numeric properties for each line
+- `xKey`: property name for X-axis (e.g., "month", "date", "week")
+- `lines`: array of `{dataKey: string (matches property in data), label: string (for legend), color: string (hex color)}`
 
 #### `area-traffic` — Area Chart (Website Traffic)
 ```json

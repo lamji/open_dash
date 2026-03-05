@@ -17,7 +17,7 @@ import type {
 import type { WidgetTemplate } from "@/domain/widgets/types";
 import { saveLayout as saveLayoutApi, getWidgets } from "@/lib/api/builder-layouts";
 import { createNavItem, getNavItems, deleteNavItem } from "@/lib/api/builder-nav";
-import { saveBlockStyles, generateAiStyle, generateAiWidgetUpdate, saveWidgetData as saveWidgetDataApi } from "@/lib/api/builder-styles";
+import { saveBlockStyles, generateAiStyle, generateAiWidgetUpdate, saveWidgetData as saveWidgetDataApi, saveGridRatio as saveGridRatioApi } from "@/lib/api/builder-styles";
 import type { DashboardTemplate } from "@/lib/dashboard-templates";
 
 export const BUILDER_CATEGORIES = [
@@ -234,6 +234,7 @@ export function useBuilder() {
   const [cssStateHistory, setCssStateHistory] = useState<string[]>([]);
   const [layoutId, setLayoutId] = useState<string | null>(null);
   const [dataJsonError, setDataJsonError] = useState<string | null>(null);
+  const [gridRatioModal, setGridRatioModal] = useState<{blockId: string} | null>(null);
 
   useEffect(() => {
     console.log(`Debug flow: useBuilder useEffect fired — loading nav items`, { projectId });
@@ -418,7 +419,13 @@ export function useBuilder() {
   };
 
   const generateAiWidget = async (blockId: string, slotIdx: number, prompt: string): Promise<{ ok: boolean; error?: string }> => {
-    console.log(`Debug flow: generateAiWidget fired with`, { blockId, slotIdx, prompt });
+    const timestamp = new Date().toISOString();
+    const logEntry = (msg: string, data?: unknown) => {
+      const logLine = `[${timestamp}] useBuilder.generateAiWidget - ${msg}${data ? ': ' + JSON.stringify(data) : ''}`;
+      console.log(logLine);
+    };
+
+    logEntry('START', { blockId, slotIdx, prompt });
     try {
       const res = await fetch("/api/builder/ai-widget", {
         method: "POST",
@@ -426,9 +433,10 @@ export function useBuilder() {
         body: JSON.stringify({ prompt }),
       });
       const data = await res.json();
-      console.log(`Debug flow: generateAiWidget response`, { ok: data.ok, widgetId: data.widget?.widgetId });
-      
+      logEntry('API Response received', { ok: data.ok, widgetId: data.widget?.widgetId, hasError: !!data.error });
+
       if (!data.ok || !data.widget) {
+        logEntry('ERROR: Invalid response', { error: data.error });
         return { ok: false, error: data.error ?? "Failed to generate widget" };
       }
 
@@ -439,6 +447,13 @@ export function useBuilder() {
         widgetData: data.widget.widgetData,
       };
 
+      logEntry('Widget created, updating state', {
+        widgetId: placed.widgetId,
+        category: placed.category,
+        widgetDataKeys: Object.keys(placed.widgetData),
+        widgetDataSample: JSON.stringify(placed.widgetData).substring(0, 200)
+      });
+
       setBlocks((prev) =>
         prev.map((b) => {
           if (b.id !== blockId) return b;
@@ -448,10 +463,12 @@ export function useBuilder() {
         })
       );
 
+      logEntry('SUCCESS: Widget placed in state', { blockId, slotIdx });
       return { ok: true };
     } catch (err) {
-      console.error(`Debug flow: generateAiWidget error`, err);
-      return { ok: false, error: err instanceof Error ? err.message : "Unknown error" };
+      const errorMsg = err instanceof Error ? err.message : "Unknown error";
+      logEntry('EXCEPTION', { error: errorMsg, stack: err instanceof Error ? err.stack : '' });
+      return { ok: false, error: errorMsg };
     }
   };
 
@@ -463,6 +480,27 @@ export function useBuilder() {
   const closeNavItemModal = () => {
     console.log(`Debug flow: closeNavItemModal fired`);
     setNavItemModalOpen(false);
+  };
+
+  const openGridRatioModal = (blockId: string) => {
+    console.log(`Debug flow: openGridRatioModal fired with`, { blockId });
+    setGridRatioModal({ blockId });
+  };
+
+  const closeGridRatioModal = () => {
+    console.log(`Debug flow: closeGridRatioModal fired`);
+    setGridRatioModal(null);
+  };
+
+  const saveGridRatio = async (blockId: string, ratio: string) => {
+    console.log(`Debug flow: saveGridRatio fired with`, { blockId, ratio });
+    const updated = blocks.map(b => b.id === blockId ? { ...b, gridRatio: ratio } : b);
+    setBlocks(updated);
+    closeGridRatioModal();
+    const result = await saveGridRatioApi(blockId, ratio, layoutId ?? undefined, updated);
+    if (result.ok && result.layoutId && !layoutId) {
+      setLayoutId(result.layoutId);
+    }
   };
 
   const addNavItem = async (label: string): Promise<boolean> => {
@@ -498,14 +536,19 @@ export function useBuilder() {
     }
   };
 
-  const openCssEditor = (blockId: string, slotIdx: number) => {
-    console.log(`Debug flow: openCssEditor fired with`, { blockId, slotIdx });
+  const openCssEditor = (blockId: string, slotIdx?: number) => {
     const block = blocks.find((b) => b.id === blockId);
-    const currentCss = block?.columnStyles?.[slotIdx] ?? "";
-    const widget = block?.slots[slotIdx] ?? null;
+    const isBlockLevel = slotIdx === undefined || slotIdx === -1;
+
+    const currentCss = isBlockLevel
+      ? block?.blockStyles ?? ""  // Block-level CSS
+      : block?.columnStyles?.[slotIdx] ?? "";  // Slot/column CSS
+
+    const widget = !isBlockLevel ? block?.slots[slotIdx ?? 0] ?? null : null;
+
     const editorState: BlockStyleEditorState = {
       blockId,
-      slotIdx,
+      slotIdx: slotIdx ?? -1,  // -1 indicates block-level editing
       css: currentCss,
       widgetId: widget?.widgetId,
       widgetTitle: widget?.title,
@@ -513,6 +556,15 @@ export function useBuilder() {
       widgetData: widget?.widgetData,
       functionCode: widget?.functionCode,
     };
+
+    const editingWhat = isBlockLevel
+      ? `block "${block?.type}" container styles`
+      : widget?.title
+        ? `column ${(slotIdx ?? 0) + 1} with widget "${widget.title}"`
+        : `column ${(slotIdx ?? 0) + 1} styles`;
+
+    console.log(`[Editor] Opening CSS editor for:`, { blockId, slotIdx: slotIdx ?? 'block-level', editingWhat });
+
     setCssEditorState(editorState);
     setCodeEditorTab("css");
     setDataEditorDraft(widget?.widgetData ? JSON.stringify(widget.widgetData, null, 2) : "");
@@ -528,16 +580,28 @@ export function useBuilder() {
     console.log(`Debug flow: saveCssStyles fired with`, { css, state: cssEditorState });
     if (!cssEditorState) return;
     const { blockId, slotIdx } = cssEditorState;
+    const isBlockLevel = slotIdx === -1;
+
     setBlocks((prev) =>
       prev.map((b) => {
         if (b.id !== blockId) return b;
-        const styles = b.columnStyles ? [...b.columnStyles] : Array.from({ length: b.slots.length }, () => "");
-        while (styles.length <= slotIdx) styles.push("");
-        styles[slotIdx] = css;
-        return { ...b, columnStyles: styles };
+
+        if (isBlockLevel) {
+          // Save block-level CSS
+          console.log(`[Styles] Saving block-level CSS`, { blockId, css });
+          return { ...b, blockStyles: css };
+        } else {
+          // Save column/slot CSS
+          const styles = b.columnStyles ? [...b.columnStyles] : Array.from({ length: b.slots.length }, () => "");
+          while (styles.length <= slotIdx) styles.push("");
+          styles[slotIdx] = css;
+          console.log(`[Styles] Saving column CSS`, { blockId, slotIdx, css });
+          return { ...b, columnStyles: styles };
+        }
       })
     );
-    const result = await saveBlockStyles(blockId, slotIdx, css, layoutId ?? undefined, blocks);
+
+    const result = await saveBlockStyles(blockId, isBlockLevel ? -1 : slotIdx, css, layoutId ?? undefined, blocks);
     if (result.ok && result.layoutId && !layoutId) {
       console.log(`Debug flow: saveCssStyles captured layoutId`, { layoutId: result.layoutId });
       setLayoutId(result.layoutId);
@@ -650,13 +714,12 @@ export function useBuilder() {
     setGroqMessages(updatedHistory);
     setGroqChatLoading(true);
 
-    const isStyleRequest = 
+    const isStyleRequest =
       messageLower.includes("height") ||
       messageLower.includes("width") ||
       messageLower.includes("padding") ||
       messageLower.includes("margin") ||
       messageLower.includes("background") ||
-      messageLower.includes("color") ||
       messageLower.includes("border") ||
       messageLower.includes("shadow") ||
       messageLower.includes("radius") ||
@@ -675,6 +738,7 @@ export function useBuilder() {
       messageLower.includes("style");
 
     const isWidgetDataUpdate = !isStyleRequest && groqChatContext.widget && (
+      messageLower.includes("color") ||
       messageLower.includes("month") ||
       messageLower.includes("label") ||
       messageLower.includes("data") ||
@@ -858,5 +922,9 @@ export function useBuilder() {
     closeGroqChat,
     sendGroqMessage,
     applyTemplate,
+    gridRatioModal,
+    openGridRatioModal,
+    closeGridRatioModal,
+    saveGridRatio,
   };
 }
