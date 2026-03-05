@@ -20,13 +20,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { DevTooltip } from "@/components/shared/DevTooltip";
+import { HtmlWithTooltips } from "@/components/shared/HtmlWithTooltips";
+import { CodeBlock } from "@/components/shared/CodeBlock";
 import { useAdminStore } from "./useAdmin";
-import { DynamicIcon, PageRenderer } from "@/lib/component-registry";
+import { PageRenderer } from "@/lib/component-registry";
 import { cn } from "@/lib/utils";
 import type {
   HeaderComponentData,
   SearchConfig,
   NotificationConfig,
+  NotificationItem,
   ProfileConfig,
   ProfileMenuItem,
   MessageConfig,
@@ -34,6 +37,60 @@ import type {
   GenericHeaderMenuItem,
 } from "@/domain/admin/types";
 
+
+/* ─── Message Content Renderer ────────────────────────── */
+
+function renderMessageContent(content: string) {
+  console.log(`Debug flow: renderMessageContent fired with`, { contentLength: content.length });
+  
+  // Parse markdown code blocks
+  const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = codeBlockRegex.exec(content)) !== null) {
+    // Add text before code block
+    if (match.index > lastIndex) {
+      const textBefore = content.substring(lastIndex, match.index);
+      if (textBefore.trim()) {
+        parts.push(
+          <p key={`text-${lastIndex}`} className="whitespace-pre-wrap">
+            {textBefore}
+          </p>
+        );
+      }
+    }
+
+    // Add code block
+    const language = match[1] || 'text';
+    const code = match[2].trim();
+    parts.push(
+      <CodeBlock key={`code-${match.index}`} code={code} language={language} />
+    );
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text after last code block
+  if (lastIndex < content.length) {
+    const textAfter = content.substring(lastIndex);
+    if (textAfter.trim()) {
+      parts.push(
+        <p key={`text-${lastIndex}`} className="whitespace-pre-wrap">
+          {textAfter}
+        </p>
+      );
+    }
+  }
+
+  // If no code blocks found, return plain text
+  if (parts.length === 0) {
+    return <p className="whitespace-pre-wrap">{content}</p>;
+  }
+
+  return <>{parts}</>;
+}
 
 /* ─── Header Component Renderers ────────────────────────── */
 
@@ -67,7 +124,6 @@ function HeaderSearch({ config }: { config: SearchConfig }) {
   );
 }
 
-type NotificationItem = { id: string; title: string; description: string; time: string; read: boolean };
 
 function HeaderNotification({ config, devMode, onNotificationClick, onViewAll }: { config: NotificationConfig; devMode: boolean; onNotificationClick: (notification: NotificationItem) => void; onViewAll: () => void }) {
   const [open, setOpen] = useState(false);
@@ -201,6 +257,7 @@ function HeaderProfile({ config, onMenuItemClick }: { config: ProfileConfig; onM
         )}
       >
         {config.avatar ? (
+          // eslint-disable-next-line @next/next/no-img-element
           <img src={config.avatar} alt="" className={cn(
             "h-7 w-7 rounded-full",
             !config.avatarClassName && "object-cover",
@@ -387,11 +444,7 @@ function GenericHeaderComponent({
           config.className
         )}
       >
-        {config.icon ? (
-          <DynamicIcon name={config.icon} size={18} />
-        ) : (
-          <DynamicIcon name="Circle" size={18} />
-        )}
+        <span className="text-lg">🔍</span>
         {config.badge != null && config.badge > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--primary)] px-1 text-[10px] font-bold text-white">
             {config.badge}
@@ -649,6 +702,7 @@ export default function AdminShell() {
     store.loadConfig("logo");
     store.loadConfig("header");
     store.loadConfig("primaryColor");
+    store.loadConfig("page_html_content");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
@@ -745,13 +799,9 @@ export default function AdminShell() {
           {!store.isSidebarCollapsed ? (
             <div className="flex items-center gap-2.5 overflow-hidden">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--primary)]">
-                {store.logo?.icon ? (
-                  <DynamicIcon name={store.logo.icon} size={16} className="text-white" />
-                ) : (
-                  <span className="text-sm font-bold text-white">
+                <span className="text-sm font-bold text-white">
                     {(store.logo?.text ?? "O").charAt(0)}
                   </span>
-                )}
               </div>
               <span className="truncate text-sm font-bold text-[var(--foreground)]">
                 {store.logo?.text || "OpenDash"}
@@ -799,15 +849,7 @@ export default function AdminShell() {
                         } ${store.isSidebarCollapsed ? "justify-center px-0" : ""}`}
                         title={item.label}
                       >
-                        <DynamicIcon
-                          name={item.icon}
-                          size={18}
-                          className={
-                            isActive
-                              ? "text-[var(--primary)]"
-                              : "text-[var(--muted-foreground)] group-hover:text-[var(--foreground)]"
-                          }
-                        />
+                        <span className="text-lg">📄</span>
                         {!store.isSidebarCollapsed && (
                           <span className="truncate text-sm">{item.label}</span>
                         )}
@@ -892,7 +934,7 @@ export default function AdminShell() {
 
         {/* Body */}
         <main className="flex-1 overflow-y-auto p-6">
-          <div className="mx-auto max-w-6xl">
+          <div className="w-full">
             {store.activeProfileView ? (
               <ProfileViewRenderer viewType={store.activeProfileView} onClose={() => store.setActiveProfileView(null)} />
             ) : store.activeView ? (
@@ -900,7 +942,12 @@ export default function AdminShell() {
             ) : store.showNotificationView ? (
               <FullNotificationView onClose={store.toggleNotificationView} onNotificationClick={handleNotificationClick} />
             ) : store.activePage ? (
-              <PageRenderer components={store.pageComponents} devMode={store.devMode} />
+              // Check if we have HTML content to render
+              store.htmlContent ? (
+                <HtmlWithTooltips html={store.htmlContent} devMode={store.devMode} />
+              ) : (
+                <PageRenderer components={store.pageComponents} devMode={store.devMode} />
+              )
             ) : (
               <div className="flex h-full min-h-[50vh] items-center justify-center">
                 <div className="text-center">
@@ -996,7 +1043,7 @@ export default function AdminShell() {
                       : "bg-[var(--muted)] text-[var(--foreground)]"
                   }`}
                 >
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                  {renderMessageContent(msg.content)}
                   {msg.actions && msg.actions.length > 0 && (
                     <div className={`mt-2 border-t pt-2 ${msg.role === "user" ? "border-white/20" : "border-[var(--border)]"}`}>
                       <p className={`text-[10px] ${msg.role === "user" ? "text-white/70" : "text-[var(--primary)]"}`}>

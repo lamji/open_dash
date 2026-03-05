@@ -37,7 +37,6 @@ import * as LucideIcons from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
@@ -73,7 +72,6 @@ import type {
   ButtonConfig,
   InputConfig,
   BadgeConfig,
-  CardConfig,
   SeparatorConfig,
   LabelConfig,
   TextareaConfig,
@@ -84,45 +82,24 @@ import type {
   AccordionConfig,
   AlertConfig,
   AlertDialogConfig,
-  AspectRatioConfig,
   BreadcrumbConfig,
   CalendarConfig,
-  CarouselConfig,
-  ChartConfig,
-  CollapsibleConfig,
-  ComboboxConfig,
-  CommandConfig,
-  ContextMenuConfig,
-  DataTableConfig,
-  DatePickerConfig,
   DialogConfig,
-  DrawerConfig,
   DropdownMenuConfig,
-  HoverCardConfig,
-  InputGroupConfig,
-  InputOTPConfig,
-  KbdConfig,
-  MenubarConfig,
-  NavigationMenuConfig,
   PaginationConfig,
   PopoverConfig,
   ProgressConfig,
   RadioGroupConfig,
-  ResizableConfig,
   ScrollAreaConfig,
   SelectConfig,
-  SheetConfig,
-  SidebarConfig,
+  TabsConfig,
+  TablePrimitiveConfig,
+  TypographyConfig,
   SkeletonConfig,
   SliderConfig,
   SonnerConfig,
   SpinnerConfig,
-  TablePrimitiveConfig,
-  TabsConfig,
-  ToastConfig,
   ToggleConfig,
-  ToggleGroupConfig,
-  TypographyConfig,
   DivConfig,
   ParagraphConfig,
   HeadingConfig,
@@ -471,11 +448,12 @@ function DataTable({ config }: { config: TableConfig }) {
 
 // ─── AnalyticsCards ─────────────────────────────────────────
 function AnalyticsCards({ config }: { config: AnalyticsCardsConfig }) {
+  console.log(`Debug flow: AnalyticsCards fired with`, { columns: config.columns, cardCount: config.cards.length });
   const cols = config.columns ?? 4;
   return (
     <div
       className="grid gap-4"
-      style={{ gridTemplateColumns: `repeat(${Math.min(cols, 4)}, 1fr)`, ...config.containerStyle }}
+      style={{ gridTemplateColumns: `repeat(${Math.min(cols, 4)}, minmax(0, 1fr))`, ...config.containerStyle }}
     >
       {config.cards.map((card, idx) => {
         const TrendIcon =
@@ -492,39 +470,40 @@ function AnalyticsCards({ config }: { config: AnalyticsCardsConfig }) {
               : "text-[var(--muted)]";
 
         return (
-          <div
-            key={idx}
-            className="group relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 transition-all hover:border-[var(--accent-cyan)]/40"
-            style={card.style}
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-[var(--accent-cyan)]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="relative z-10">
-              <div className="flex items-center justify-between mb-3">
-                <span className="font-[family-name:var(--font-heading)] text-xs uppercase tracking-wider text-[var(--muted)]" style={card.titleStyle}>
-                  {card.title}
-                </span>
-                {card.icon && (
-                  <DynamicIcon
-                    name={card.icon}
-                    size={18}
-                    className="text-[var(--accent-cyan)] opacity-60"
-                  />
-                )}
-              </div>
-              <div className="font-[family-name:var(--font-heading)] text-2xl font-bold text-[var(--foreground)]" style={card.valueStyle}>
-                {card.value}
-              </div>
-              {card.change && (
-                <div className={`mt-2 flex items-center gap-1 text-xs ${trendColor}`}>
-                  <TrendIcon size={14} />
-                  <span>{card.change}</span>
-                  {card.description && (
-                    <span className="text-[var(--muted)] ml-1">
-                      {card.description}
-                    </span>
+          <div key={idx} className="p-2.5">
+            <div
+              className="w-full group relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 transition-all hover:border-[var(--accent-cyan)]/40"
+              style={card.style}
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-[var(--accent-cyan)]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-[family-name:var(--font-heading)] text-xs uppercase tracking-wider text-[var(--muted)]" style={card.titleStyle}>
+                    {card.title}
+                  </span>
+                  {card.icon && (
+                    <DynamicIcon
+                      name={card.icon}
+                      size={18}
+                      className="text-[var(--accent-cyan)] opacity-60"
+                    />
                   )}
                 </div>
-              )}
+                <div className="font-[family-name:var(--font-heading)] text-2xl font-bold text-[var(--foreground)]" style={card.valueStyle}>
+                  {card.value}
+                </div>
+                {card.change && (
+                  <div className={`mt-2 flex items-center gap-1 text-xs ${trendColor}`}>
+                    <TrendIcon size={14} />
+                    <span>{card.change}</span>
+                    {card.description && (
+                      <span className="text-[var(--muted)] ml-1">
+                        {card.description}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         );
@@ -874,6 +853,16 @@ function ContainerBlock({
   );
 }
 
+// ─── HTML Block (Raw HTML Renderer) ──────────────────────────
+function HTMLBlock({ config }: { config: { html: string } }) {
+  return (
+    <div 
+      data-test-id="html-block"
+      dangerouslySetInnerHTML={{ __html: config.html || "" }}
+    />
+  );
+}
+
 // ─── UI Primitive Blocks ────────────────────────────────────
 function ButtonBlock({ config }: { config: ButtonConfig }) {
   const IconComp = config.icon ? DynamicIcon : null;
@@ -971,62 +960,6 @@ function BadgeBlock({ config }: { config: BadgeConfig }) {
   );
 }
 
-function CardBlock({ 
-  config, 
-  childComponents, 
-  devMode 
-}: { 
-  config: CardConfig; 
-  childComponents?: PageComponentData[]; 
-  devMode?: boolean;
-}) {
-  const sorted = childComponents ? [...childComponents].sort((a, b) => a.order - b.order) : [];
-  const hasChildren = sorted.length > 0;
-
-  return (
-    <Card className={config.className} style={config.style} data-test-id="dynamic-card">
-      {(config.title || config.description) && (
-        <CardHeader>
-          {config.title && <CardTitle style={config.titleStyle}>{config.title}</CardTitle>}
-          {config.description && <CardDescription>{config.description}</CardDescription>}
-        </CardHeader>
-      )}
-      {(config.content || hasChildren) && (
-        <CardContent style={config.contentStyle}>
-          {config.content && typeof config.content === 'string' && config.content}
-          {hasChildren && sorted.map((child) => {
-            const ChildRenderer = COMPONENT_REGISTRY[child.type];
-            if (!ChildRenderer) return <UnknownComponent key={child.id} type={child.type} />;
-            const isContainer = child.type === "container";
-            const isCard = child.type === "card";
-            return (
-              <DevTooltip key={child.id} id={child.id} enabled={devMode ?? false} type={child.type}>
-                <div className="animate-fade-in-up" data-component-id={child.id}>
-                  {isContainer ? (
-                    <ContainerBlock
-                      config={child.config as unknown as ContainerConfig}
-                      childComponents={child.children}
-                      devMode={devMode}
-                    />
-                  ) : isCard ? (
-                    <CardBlock
-                      config={child.config as unknown as CardConfig}
-                      childComponents={child.children}
-                      devMode={devMode}
-                    />
-                  ) : (
-                    <ChildRenderer config={child.config} />
-                  )}
-                </div>
-              </DevTooltip>
-            );
-          })}
-        </CardContent>
-      )}
-      {config.footer && <CardFooter>{config.footer}</CardFooter>}
-    </Card>
-  );
-}
 
 function SeparatorBlock({ config }: { config: SeparatorConfig }) {
   return <Separator orientation={config.orientation} className={config.className} />;
@@ -1495,6 +1428,7 @@ function ListBlock({ config }: { config: ListConfig }) {
 
 function ImageBlock({ config }: { config: ImageConfig }) {
   return (
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={config.src}
       alt={config.alt}
@@ -1522,11 +1456,13 @@ const COMPONENT_REGISTRY: Record<string, RendererFn> = {
   // Container (parent with children)
   container: ({ config }) => <ContainerBlock config={config as unknown as ContainerConfig} />,
   
+  // HTML (Raw HTML - Simple Div Creation)
+  html: ({ config }) => <HTMLBlock config={config as { html: string }} />,
+  
   // UI Primitives (Installed)
   button: ({ config }) => <ButtonBlock config={config as unknown as ButtonConfig} />,
   input: ({ config }) => <InputBlock config={config as unknown as InputConfig} />,
   badge: ({ config }) => <BadgeBlock config={config as unknown as BadgeConfig} />,
-  card: ({ config }) => <CardBlock config={config as unknown as CardConfig} />,
   separator: ({ config }) => <SeparatorBlock config={config as unknown as SeparatorConfig} />,
   label: ({ config }) => <LabelBlock config={config as unknown as LabelConfig} />,
   textarea: ({ config }) => <TextareaBlock config={config as unknown as TextareaConfig} />,
@@ -1607,6 +1543,66 @@ const COMPONENT_REGISTRY: Record<string, RendererFn> = {
   img: ({ config }) => <ImageBlock config={config as unknown as ImageConfig} />,
 };
 
+// ─── Debug Logging Helper ───────────────────────────────────
+function logComponentRenderDetails(comp: PageComponentData, depth = 0) {
+  const indent = "  ".repeat(depth);
+  const config = comp.config as Record<string, unknown>;
+  
+  // Extract all styling information
+  const className = config.className || "";
+  const style = config.style || {};
+  const inlineStyles = typeof style === "object" ? style : {};
+  
+  // Build detailed component structure log
+  const componentDetails = {
+    id: comp.id,
+    type: comp.type,
+    order: comp.order,
+    parentId: comp.parentId,
+    className: className,
+    inlineStyles: inlineStyles,
+    config: config,
+    hasChildren: comp.children && comp.children.length > 0,
+    childCount: comp.children?.length || 0,
+  };
+  
+  // Log the full component structure with actual applied styles
+  console.log(`${indent}┌─ Component Render Details ─────────────────────────────────`);
+  console.log(`${indent}│ ID: ${comp.id}`);
+  console.log(`${indent}│ Type: ${comp.type}`);
+  console.log(`${indent}│ Order: ${comp.order}`);
+  console.log(`${indent}│ Parent ID: ${comp.parentId || "ROOT"}`);
+  console.log(`${indent}│`);
+  console.log(`${indent}│ ── Styling from DB ──`);
+  console.log(`${indent}│ className: "${className}"`);
+  console.log(`${indent}│ inline styles:`, inlineStyles);
+  console.log(`${indent}│`);
+  console.log(`${indent}│ ── Full Config ──`);
+  console.log(`${indent}│`, config);
+  console.log(`${indent}│`);
+  console.log(`${indent}│ ── Generated HTML Structure ──`);
+  
+  // Show actual HTML structure that will be generated
+  const htmlPreview = `<div className="${className}" style={${JSON.stringify(inlineStyles)}} data-component-id="${comp.id}">
+  ${comp.type === "container" ? `<div className="${(config as ContainerConfig).className || ''}">
+    ${comp.children?.length || 0} child component(s)
+  </div>` : `<${comp.type} component with config />`}
+</div>`;
+  
+  console.log(`${indent}│`, htmlPreview);
+  console.log(`${indent}└────────────────────────────────────────────────────────────`);
+  
+  // Recursively log children
+  if (comp.children && comp.children.length > 0) {
+    console.log(`${indent}  ↓ Children (${comp.children.length}):`);
+    comp.children.forEach((child) => {
+      logComponentRenderDetails(child, depth + 1);
+    });
+  }
+  
+  return componentDetails;
+}
+
 // ─── PageRenderer (exported) ────────────────────────────────
 export function PageRenderer({
   components,
@@ -1615,7 +1611,17 @@ export function PageRenderer({
   components: PageComponentData[];
   devMode?: boolean;
 }) {
+  // Log full page render details
+  console.log("═══════════════════════════════════════════════════════════");
+  console.log("🎨 PAGE RENDER - Full Component Tree from Database");
+  console.log("═══════════════════════════════════════════════════════════");
+  console.log(`Total components: ${components.length}`);
+  console.log(`Dev mode: ${devMode}`);
+  console.log("───────────────────────────────────────────────────────────");
+  
   if (components.length === 0) {
+    console.log("⚠️  No components to render");
+    console.log("═══════════════════════════════════════════════════════════");
     return (
       <div className="flex flex-1 items-center justify-center">
         <div className="text-center">
@@ -1630,17 +1636,26 @@ export function PageRenderer({
     );
   }
 
+  // Log each component's full render details
+  const sortedComponents = [...components].sort((a, b) => a.order - b.order);
+  sortedComponents.forEach((comp, idx) => {
+    console.log(`\n[${idx + 1}/${sortedComponents.length}] Rendering component:`);
+    logComponentRenderDetails(comp);
+  });
+  
+  console.log("\n═══════════════════════════════════════════════════════════");
+  console.log("✅ PAGE RENDER COMPLETE - Check logs above for details");
+  console.log("═══════════════════════════════════════════════════════════\n");
+
   return (
-    <div className="grid gap-6">
-      {[...components]
-        .sort((a, b) => a.order - b.order)
-        .map((comp) => {
+    <div className="flex flex-col gap-6 p-[10px] items-start">
+      {sortedComponents.map((comp) => {
           const Renderer = COMPONENT_REGISTRY[comp.type];
           if (!Renderer) {
             return <UnknownComponent key={comp.id} type={comp.type} />;
           }
           const isContainer = comp.type === "container";
-          const isCard = comp.type === "card";
+          const isHTML = comp.type === "html";
           return (
             <DevTooltip key={comp.id} id={comp.id} enabled={devMode} type={comp.type}>
               <div className="animate-fade-in-up" data-component-id={comp.id}>
@@ -1650,12 +1665,8 @@ export function PageRenderer({
                     childComponents={comp.children}
                     devMode={devMode}
                   />
-                ) : isCard ? (
-                  <CardBlock
-                    config={comp.config as unknown as CardConfig}
-                    childComponents={comp.children}
-                    devMode={devMode}
-                  />
+                ) : isHTML ? (
+                  <HTMLBlock config={comp.config as { html: string }} />
                 ) : (
                   <Renderer config={comp.config} />
                 )}
@@ -1665,6 +1676,121 @@ export function PageRenderer({
         })}
     </div>
   );
+}
+
+// ─── Component to JSX Serializer (Voice of Truth) ──────────
+export function componentToJSX(component: PageComponentData, indent: number = 0): string {
+  console.log(`Debug flow: componentToJSX fired with`, { componentId: component.id, type: component.type, indent });
+  
+  const spaces = "  ".repeat(indent);
+  const config = component.config as Record<string, unknown>;
+  
+  // Map component type to JSX element name
+  const getElementName = (type: string): string => {
+    const typeMap: Record<string, string> = {
+      container: "div",
+      button: "Button",
+      input: "Input",
+      text: "span",
+      card: "Card",
+      badge: "Badge",
+      label: "Label",
+      textarea: "Textarea",
+      separator: "Separator",
+      checkbox: "Checkbox",
+      switch: "Switch",
+      avatar: "Avatar",
+      progress: "Progress",
+      accordion: "Accordion",
+      alert: "Alert",
+      "analytics-cards": "AnalyticsCards",
+      table: "DataTable",
+      "chart-bar": "BarChart",
+      "chart-line": "LineChart",
+      "editable-input": "EditableInput",
+      "filter-menu": "FilterMenu",
+    };
+    
+    // Typography special case
+    if (type === "typography") {
+      const headerType = config.headerType as string | undefined;
+      return headerType || "h1";
+    }
+    
+    return typeMap[type] || type;
+  };
+  
+  const elementName = getElementName(component.type);
+  const props: string[] = [];
+  
+  // Serialize key props based on component type
+  if (config.className && typeof config.className === "string") {
+    props.push(`className="${config.className}"`);
+  }
+  
+  if (component.type === "button" && config.label) {
+    // Button children is the label
+  } else if (component.type === "input") {
+    if (config.type) props.push(`type="${config.type}"`);
+    if (config.placeholder) props.push(`placeholder="${config.placeholder}"`);
+    if (config.value) props.push(`value="${config.value}"`);
+  } else if (component.type === "text" && config.content) {
+    // Text children is the content
+  } else if (component.type === "typography" && config.text) {
+    // Typography children is the text
+  } else if (component.type === "badge" && config.text) {
+    // Badge children is the text
+  } else if (component.type === "label" && config.text) {
+    // Label children is the text
+  }
+  
+  if (config.variant) props.push(`variant="${config.variant}"`);
+  if (config.size) props.push(`size="${config.size}"`);
+  if (config.disabled) props.push(`disabled={true}`);
+  if (config.required) props.push(`required={true}`);
+  
+  // Get children content
+  const getChildren = (): string | null => {
+    if (component.type === "button" && config.label) return config.label as string;
+    if (component.type === "text" && config.content) return config.content as string;
+    if (component.type === "typography" && config.text) return config.text as string;
+    if (component.type === "badge" && config.text) return config.text as string;
+    if (component.type === "label" && config.text) return config.text as string;
+    return null;
+  };
+  
+  const childrenText = getChildren();
+  const hasChildComponents = component.children && component.children.length > 0;
+  
+  // Build JSX string
+  const propsStr = props.length > 0 ? " " + props.join(" ") : "";
+  
+  if (!childrenText && !hasChildComponents) {
+    // Self-closing tag
+    return `${spaces}<${elementName}${propsStr} />`;
+  }
+  
+  if (childrenText && !hasChildComponents) {
+    // Single line with text content
+    return `${spaces}<${elementName}${propsStr}>${childrenText}</${elementName}>`;
+  }
+  
+  // Multi-line with children
+  const lines: string[] = [];
+  lines.push(`${spaces}<${elementName}${propsStr}>`);
+  
+  if (childrenText) {
+    lines.push(`${spaces}  ${childrenText}`);
+  }
+  
+  if (hasChildComponents) {
+    component.children!.forEach(child => {
+      lines.push(componentToJSX(child, indent + 1));
+    });
+  }
+  
+  lines.push(`${spaces}</${elementName}>`);
+  return lines.join("\n");
 }
 
 export { DynamicIcon };

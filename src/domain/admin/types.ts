@@ -825,6 +825,15 @@ export interface AIExecutionResult {
   error?: string;
 }
 
+// ─── Notification ───────────────────────────────────────────
+export interface NotificationItem {
+  id: string;
+  title: string;
+  description: string;
+  time: string;
+  read: boolean;
+}
+
 // ─── Store ─────────────────────────────────────────────────
 export interface DashboardStore {
   projectId: string | null;
@@ -834,6 +843,7 @@ export interface DashboardStore {
   headerComponents: HeaderComponentData[];
   logo: LogoConfig | null;
   header: HeaderConfig | null;
+  htmlContent: string | null;
   isChatOpen: boolean;
   chatMessages: ChatMessageData[];
   isAiThinking: boolean;

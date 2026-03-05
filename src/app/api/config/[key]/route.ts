@@ -18,5 +18,10 @@ export async function GET(
     return NextResponse.json(null, { status: 200 });
   }
 
+  // For page_html_content, return raw HTML string without JSON parsing
+  if (key === "page_html_content") {
+    return NextResponse.json(config.value);
+  }
+
   return NextResponse.json(JSON.parse(config.value));
 }
