@@ -16,7 +16,9 @@ export interface LayoutBlock {
   id: string;
   type: LayoutType;
   slots: (PlacedWidget | null)[];
-  columnStyles?: string[];
+  blockStyles?: string;  // CSS for the block container itself
+  columnStyles?: string[];  // CSS for each slot/column within the block
+  gridRatio?: string;  // CSS grid-template-columns value (e.g., "7fr 5fr")
 }
 
 export interface BlockStyleEditorState {

@@ -110,7 +110,8 @@ export default function DashboardPreview({ id }: Props) {
               {record.layout.map((block) => (
                 <div
                   key={block.id}
-                  className={`grid gap-4 ${GRID_CLASS[block.type] ?? "grid-cols-1"}`}
+                  className={`grid gap-4 ${block.gridRatio ? "" : GRID_CLASS[block.type] ?? "grid-cols-1"}`}
+                  style={block.gridRatio ? { gridTemplateColumns: block.gridRatio } : undefined}
                   data-test-id={`preview-block-${block.id}`}
                 >
                   {block.slots.map((widget, slotIdx) => (

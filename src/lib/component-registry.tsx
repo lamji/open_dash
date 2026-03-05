@@ -514,6 +514,47 @@ function AnalyticsCards({ config }: { config: AnalyticsCardsConfig }) {
 
 // ─── BarChartBlock ──────────────────────────────────────────
 function BarChartBlock({ config }: { config: BarChartConfig }) {
+  // Log chart rendering for debugging
+  React.useEffect(() => {
+    const logData = {
+      timestamp: new Date().toISOString(),
+      title: config.title,
+      xKey: config.xKey,
+      barsCount: config.bars?.length ?? 0,
+      dataPoints: config.data?.length ?? 0,
+      configKeys: Object.keys(config)
+    };
+    console.log('[BarChartBlock] Rendering with config:', logData);
+
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const logPath = path.join(process.cwd(), '.logs', 'component-render.log');
+      fs.appendFileSync(logPath, `[BarChartBlock] ${JSON.stringify(logData)}\n`);
+    } catch (e) {
+      // Silent fail
+    }
+  }, [config]);
+
+  // Early return if missing critical data
+  if (!config.data || !Array.isArray(config.data) || config.data.length === 0) {
+    console.error('[BarChartBlock] Missing or empty data array:', config.data);
+    return (
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+        <p className="text-red-500 text-sm">Error: No data provided for bar chart</p>
+      </div>
+    );
+  }
+
+  if (!config.bars || !Array.isArray(config.bars) || config.bars.length === 0) {
+    console.error('[BarChartBlock] Missing or empty bars array:', config.bars);
+    return (
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+        <p className="text-red-500 text-sm">Error: No bar definitions provided</p>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5" style={config.containerStyle}>
       {config.title && (
@@ -560,6 +601,47 @@ function BarChartBlock({ config }: { config: BarChartConfig }) {
 
 // ─── LineChartBlock ─────────────────────────────────────────
 function LineChartBlock({ config }: { config: LineChartConfig }) {
+  // Log chart rendering for debugging
+  React.useEffect(() => {
+    const logData = {
+      timestamp: new Date().toISOString(),
+      title: config.title,
+      xKey: config.xKey,
+      linesCount: config.lines?.length ?? 0,
+      dataPoints: config.data?.length ?? 0,
+      configKeys: Object.keys(config)
+    };
+    console.log('[LineChartBlock] Rendering with config:', logData);
+
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const logPath = path.join(process.cwd(), '.logs', 'component-render.log');
+      fs.appendFileSync(logPath, `[LineChartBlock] ${JSON.stringify(logData)}\n`);
+    } catch (e) {
+      // Silent fail
+    }
+  }, [config]);
+
+  // Early return if missing critical data
+  if (!config.data || !Array.isArray(config.data) || config.data.length === 0) {
+    console.error('[LineChartBlock] Missing or empty data array:', config.data);
+    return (
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+        <p className="text-red-500 text-sm">Error: No data provided for line chart</p>
+      </div>
+    );
+  }
+
+  if (!config.lines || !Array.isArray(config.lines) || config.lines.length === 0) {
+    console.error('[LineChartBlock] Missing or empty lines array:', config.lines);
+    return (
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5">
+        <p className="text-red-500 text-sm">Error: No line definitions provided</p>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5" style={config.containerStyle}>
       {config.title && (
