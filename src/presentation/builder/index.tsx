@@ -687,7 +687,7 @@ export default function BuilderShell() {
             ) : (
               <div className="p-6" data-test-id="builder-variant-grid">
                 <WidgetPickerCard
-                  templates={variantTemplates}
+                  templates={variantTemplates as any}
                   onSelect={(template) => {
                     if (showWidgetVariantPicker) {
                       placeWidget(showWidgetVariantPicker.blockId, showWidgetVariantPicker.slotIdx, template);
