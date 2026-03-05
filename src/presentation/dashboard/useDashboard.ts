@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import type {
   DashboardProject,
   CreateProjectInput,
@@ -12,9 +13,13 @@ import {
   createProjectApi,
   updateProjectApi,
   deleteProjectApi,
+  logoutApi,
 } from "@/lib/auth-api";
 
 export function useDashboard() {
+  const router = useRouter();
+  const [selectedProject, setSelectedProject] = useState<DashboardProject | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [state, setState] = useState<DashboardState>({
     projects: [],
     loading: true,
@@ -120,8 +125,38 @@ export function useDashboard() {
   const setDeletingProject = (project: DashboardProject | null) =>
     setState((s) => ({ ...s, deletingProject: project }));
 
+  const handleLogout = useCallback(async () => {
+    console.log(`Debug flow: handleLogout fired`);
+    await logoutApi();
+    router.push("/");
+  }, [router]);
+
+  const handleOpenBuilder = useCallback((project: DashboardProject) => {
+    console.log(`Debug flow: handleOpenBuilder fired with`, { projectId: project.id });
+    router.push(`/builder?projectId=${project.id}`);
+  }, [router]);
+
+  const handleViewLive = useCallback((project: DashboardProject) => {
+    console.log(`Debug flow: handleViewLive fired with`, { projectId: project.id });
+    router.push(`/builder?projectId=${project.id}&preview=true`);
+  }, [router]);
+
+  const handleRowClick = useCallback((project: DashboardProject) => {
+    console.log(`Debug flow: handleRowClick fired with`, { projectId: project.id });
+    setSelectedProject(project);
+    setSheetOpen(true);
+  }, []);
+
+  const handleCloseSheet = useCallback(() => {
+    console.log(`Debug flow: handleCloseSheet fired`);
+    setSheetOpen(false);
+    setSelectedProject(null);
+  }, []);
+
   return {
     ...state,
+    selectedProject,
+    sheetOpen,
     loadProjects,
     createProject,
     updateProject,
@@ -130,5 +165,10 @@ export function useDashboard() {
     setShowCreateDialog,
     setEditingProject,
     setDeletingProject,
+    handleLogout,
+    handleOpenBuilder,
+    handleViewLive,
+    handleRowClick,
+    handleCloseSheet,
   };
 }

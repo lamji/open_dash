@@ -1,10 +1,10 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { LayoutDashboard, Loader2 } from "lucide-react";
 import { useForgotPassword } from "./useForgotPassword";
 
@@ -18,31 +18,31 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
+    <div className="flex min-h-screen flex-col bg-gradient-to-b from-blue-50 to-blue-100">
       <div className="flex h-14 items-center px-6">
         <Link
           href="/"
           className="flex items-center gap-2"
           data-test-id="forgot-password-logo"
         >
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-900">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
             <LayoutDashboard size={14} className="text-white" />
           </div>
-          <span className="text-sm font-bold text-gray-900">OpenDash</span>
+          <span className="text-sm font-bold text-blue-900">OpenDash</span>
         </Link>
       </div>
 
       <div className="flex flex-1 items-center justify-center px-4">
-        <Card className="w-full max-w-sm border-gray-200 shadow-sm">
-          <CardHeader className="space-y-1 pb-4 pt-6 text-center">
-            <h1 className="text-xl font-bold text-gray-900">
+        <div className="w-full max-w-sm">
+          <div className="space-y-1 pb-6 text-center">
+            <h1 className="text-2xl font-bold text-blue-900">
               Reset your password
             </h1>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-blue-600">
               Enter your email and we will send you a reset link
             </p>
-          </CardHeader>
-          <CardContent className="pb-6">
+          </div>
+          <div>
             {success ? (
               <div
                 className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700"
@@ -65,7 +65,7 @@ export default function ForgotPasswordPage() {
                 <div className="space-y-1.5">
                   <Label
                     htmlFor="email"
-                    className="text-sm font-medium text-gray-700"
+                    className="text-sm font-medium text-blue-900"
                   >
                     Email
                   </Label>
@@ -77,7 +77,7 @@ export default function ForgotPasswordPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={isSubmitting}
                     data-test-id="forgot-password-email-input"
-                    className="h-10 border-gray-300 focus-visible:ring-gray-400"
+                    className="h-10 border-blue-300 bg-white focus-visible:ring-blue-400"
                   />
                 </div>
 
@@ -85,7 +85,7 @@ export default function ForgotPasswordPage() {
                   type="submit"
                   disabled={isSubmitting}
                   data-test-id="forgot-password-submit-btn"
-                  className="h-10 w-full bg-gray-900 font-medium text-white hover:bg-gray-800"
+                  className="h-10 w-full bg-blue-600 font-medium text-white hover:bg-blue-700"
                 >
                   {isSubmitting ? (
                     <>
@@ -99,18 +99,18 @@ export default function ForgotPasswordPage() {
               </form>
             )}
 
-            <p className="mt-6 text-center text-sm text-gray-500">
+            <p className="mt-6 text-center text-sm text-blue-600">
               Remember your password?{" "}
               <Link
                 href="/auth/login"
-                className="font-medium text-gray-900 underline-offset-4 hover:underline"
+                className="font-medium text-blue-900 underline-offset-4 hover:underline"
                 data-test-id="forgot-password-login-link"
               >
                 Log in
               </Link>
             </p>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   );

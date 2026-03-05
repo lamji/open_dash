@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { readFileSync } from "fs";
 import { join } from "path";
 import React from "react";
+import Link from "next/link";
 
 // Convert Markdown to HTML (basic implementation)
 function markdownToHtml(markdown: string): string {
@@ -36,36 +37,41 @@ function markdownToHtml(markdown: string): string {
     .replace(/^(?!(<h|<ul|<table|<pre|<p))(.+)$/gm, "<p class='my-4'>$2</p>");
 }
 
-export default function HowToPage() {
+function getHowToContent(): string | null {
   try {
-    // Read the markdown file
     const filePath = join(process.cwd(), "how-to.md");
     const markdown = readFileSync(filePath, "utf-8");
-    
-    // Convert to HTML
-    const htmlContent = markdownToHtml(markdown);
-    
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="mx-auto max-w-4xl px-4 py-8">
-          <div className="mb-8">
-            <a 
-              href="/" 
-              className="text-blue-600 hover:underline mb-4 inline-block"
-            >
-              ← Back to Home
-            </a>
-          </div>
-          
-          <div 
-            className="prose prose-lg max-w-none"
-            dangerouslySetInnerHTML={{ __html: htmlContent }}
-          />
-        </div>
-      </div>
-    );
+    return markdownToHtml(markdown);
   } catch (error) {
     console.error("Error reading how-to.md:", error);
+    return null;
+  }
+}
+
+export default function HowToPage() {
+  const htmlContent = getHowToContent();
+  
+  if (!htmlContent) {
     notFound();
   }
+  
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="mx-auto max-w-4xl px-4 py-8">
+        <div className="mb-8">
+          <Link 
+            href="/" 
+            className="text-blue-600 hover:underline mb-4 inline-block"
+          >
+            ← Back to Home
+          </Link>
+        </div>
+        
+        <div 
+          className="prose prose-lg max-w-none"
+          dangerouslySetInnerHTML={{ __html: htmlContent }}
+        />
+      </div>
+    </div>
+  );
 }

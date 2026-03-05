@@ -1,16 +1,18 @@
 "use client";
 
+import React from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { LayoutDashboard, Loader2 } from "lucide-react";
+import { LayoutDashboard, Loader2, Eye, EyeOff } from "lucide-react";
 import { useSignup } from "./useSignup";
 
 
 export default function SignupPage() {
   const { form, errors, isSubmitting, setField, handleSubmit } = useSignup();
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,7 +20,7 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
+    <div className="flex min-h-screen flex-col bg-gradient-to-b from-blue-50 to-blue-100">
       {/* Top bar */}
       <div className="flex h-14 items-center px-6">
         <Link
@@ -26,25 +28,25 @@ export default function SignupPage() {
           className="flex items-center gap-2"
           data-test-id="signup-logo"
         >
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-900">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
             <LayoutDashboard size={14} className="text-white" />
           </div>
-          <span className="text-sm font-bold text-gray-900">OpenDash</span>
+          <span className="text-sm font-bold text-blue-900">OpenDash</span>
         </Link>
       </div>
 
       {/* Form */}
       <div className="flex flex-1 items-center justify-center px-4">
-        <Card className="w-full max-w-sm border-gray-200 shadow-sm">
-          <CardHeader className="space-y-1 pb-4 pt-6 text-center">
-            <h1 className="text-xl font-bold text-gray-900">
+        <div className="w-full max-w-sm">
+          <div className="space-y-1 pb-6 text-center">
+            <h1 className="text-2xl font-bold text-blue-900">
               Create your account
             </h1>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-blue-600">
               Start building with OpenDash for free
             </p>
-          </CardHeader>
-          <CardContent className="pb-6">
+          </div>
+          <div>
             <form onSubmit={onSubmit} className="space-y-4">
               {errors.general && (
                 <div
@@ -56,7 +58,7 @@ export default function SignupPage() {
               )}
 
               <div className="space-y-1.5">
-                <Label htmlFor="name" className="text-sm font-medium text-gray-700">
+                <Label htmlFor="name" className="text-sm font-medium text-blue-900">
                   Full Name
                 </Label>
                 <Input
@@ -67,7 +69,7 @@ export default function SignupPage() {
                   onChange={(e) => setField("name", e.target.value)}
                   disabled={isSubmitting}
                   data-test-id="signup-name-input"
-                  className="h-10 border-gray-300 focus-visible:ring-gray-400"
+                  className="h-10 border-blue-300 bg-white focus-visible:ring-blue-400"
                 />
                 {errors.name && (
                   <p className="text-xs text-red-600">{errors.name}</p>
@@ -75,7 +77,7 @@ export default function SignupPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+                <Label htmlFor="email" className="text-sm font-medium text-blue-900">
                   Email
                 </Label>
                 <Input
@@ -86,7 +88,7 @@ export default function SignupPage() {
                   onChange={(e) => setField("email", e.target.value)}
                   disabled={isSubmitting}
                   data-test-id="signup-email-input"
-                  className="h-10 border-gray-300 focus-visible:ring-gray-400"
+                  className="h-10 border-blue-300 bg-white focus-visible:ring-blue-400"
                 />
                 {errors.email && (
                   <p className="text-xs text-red-600">{errors.email}</p>
@@ -94,19 +96,29 @@ export default function SignupPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="password" className="text-sm font-medium text-gray-700">
+                <Label htmlFor="password" className="text-sm font-medium text-blue-900">
                   Password
                 </Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="At least 8 characters"
-                  value={form.password}
-                  onChange={(e) => setField("password", e.target.value)}
-                  disabled={isSubmitting}
-                  data-test-id="signup-password-input"
-                  className="h-10 border-gray-300 focus-visible:ring-gray-400"
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="At least 8 characters"
+                    value={form.password}
+                    onChange={(e) => setField("password", e.target.value)}
+                    disabled={isSubmitting}
+                    data-test-id="signup-password-input"
+                    className="h-10 border-blue-300 bg-white pr-10 focus-visible:ring-blue-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-400 hover:text-blue-600"
+                    data-test-id="signup-password-toggle"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
                 {errors.password && (
                   <p className="text-xs text-red-600">{errors.password}</p>
                 )}
@@ -115,20 +127,30 @@ export default function SignupPage() {
               <div className="space-y-1.5">
                 <Label
                   htmlFor="confirmPassword"
-                  className="text-sm font-medium text-gray-700"
+                  className="text-sm font-medium text-blue-900"
                 >
                   Confirm Password
                 </Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  placeholder="Repeat your password"
-                  value={form.confirmPassword}
-                  onChange={(e) => setField("confirmPassword", e.target.value)}
-                  disabled={isSubmitting}
-                  data-test-id="signup-confirm-password-input"
-                  className="h-10 border-gray-300 focus-visible:ring-gray-400"
-                />
+                <div className="relative">
+                  <Input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="Repeat your password"
+                    value={form.confirmPassword}
+                    onChange={(e) => setField("confirmPassword", e.target.value)}
+                    disabled={isSubmitting}
+                    data-test-id="signup-confirm-password-input"
+                    className="h-10 border-blue-300 bg-white pr-10 focus-visible:ring-blue-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-400 hover:text-blue-600"
+                    data-test-id="signup-confirm-password-toggle"
+                  >
+                    {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
                 {errors.confirmPassword && (
                   <p className="text-xs text-red-600">
                     {errors.confirmPassword}
@@ -140,7 +162,7 @@ export default function SignupPage() {
                 type="submit"
                 disabled={isSubmitting}
                 data-test-id="signup-submit-btn"
-                className="h-10 w-full bg-gray-900 font-medium text-white hover:bg-gray-800"
+                className="h-10 w-full bg-blue-600 font-medium text-white hover:bg-blue-700"
               >
                 {isSubmitting ? (
                   <>
@@ -153,18 +175,18 @@ export default function SignupPage() {
               </Button>
             </form>
 
-            <p className="mt-6 text-center text-sm text-gray-500">
+            <p className="mt-6 text-center text-sm text-blue-600">
               Already have an account?{" "}
               <Link
                 href="/auth/login"
-                className="font-medium text-gray-900 underline-offset-4 hover:underline"
+                className="font-medium text-blue-900 underline-offset-4 hover:underline"
                 data-test-id="signup-login-link"
               >
                 Log in
               </Link>
             </p>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   );

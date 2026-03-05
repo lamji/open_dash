@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   Bot,
   Zap,
@@ -15,10 +14,9 @@ import {
   CheckCircle2,
   LayoutDashboard,
   BarChart3,
-  Users,
   TrendingUp,
 } from "lucide-react";
-import type { FeatureItem, StepItem, FooterSection } from "@/domain/auth/types";
+import type { FeatureItem, StepItem, FooterSection } from "@/domain/landing/types";
 
 const FEATURES: FeatureItem[] = [
   {
@@ -118,39 +116,39 @@ const ICON_MAP: Record<string, React.ReactNode> = {
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white text-gray-900">
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-blue-100 text-blue-900">
       {/* ─── Navigation ─────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 border-b border-gray-100 bg-white/95 backdrop-blur-sm">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
+      <nav className="sticky top-0 z-50 border-b border-blue-200 bg-white/80 backdrop-blur-md shadow-sm">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
           <Link
             href="/"
             className="flex items-center gap-2.5"
             data-test-id="landing-logo"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-900">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600">
               <LayoutDashboard size={16} className="text-white" />
             </div>
-            <span className="text-lg font-bold tracking-tight">OpenDash</span>
+            <span className="text-lg font-bold tracking-tight text-blue-900">OpenDash</span>
           </Link>
 
           <div className="hidden items-center gap-8 md:flex">
             <a
               href="#features"
-              className="text-sm font-medium text-gray-600 transition-colors hover:text-gray-900"
+              className="text-sm font-medium text-blue-700 transition-colors hover:text-blue-900"
               data-test-id="landing-nav-features"
             >
               Features
             </a>
             <a
               href="/how-to"
-              className="text-sm font-medium text-gray-600 transition-colors hover:text-gray-900"
+              className="text-sm font-medium text-blue-700 transition-colors hover:text-blue-900"
               data-test-id="landing-nav-how-it-works"
             >
               How It Works
             </a>
             <a
               href="#pricing"
-              className="text-sm font-medium text-gray-600 transition-colors hover:text-gray-900"
+              className="text-sm font-medium text-blue-700 transition-colors hover:text-blue-900"
               data-test-id="landing-nav-pricing"
             >
               Pricing
@@ -162,7 +160,7 @@ export default function LandingPage() {
               <Button
                 variant="ghost"
                 data-test-id="landing-login-btn"
-                className="text-sm font-medium text-gray-600 hover:text-gray-900"
+                className="text-sm font-medium text-blue-700 hover:text-blue-900"
               >
                 Log In
               </Button>
@@ -170,7 +168,7 @@ export default function LandingPage() {
             <Link href="/signup">
               <Button
                 data-test-id="landing-signup-btn"
-                className="bg-gray-900 text-sm font-medium text-white hover:bg-gray-800"
+                className="bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 shadow-md"
               >
                 Get Started Free
               </Button>
@@ -180,167 +178,121 @@ export default function LandingPage() {
       </nav>
 
       {/* ─── Hero ───────────────────────────────────────── */}
-      <section className="px-6 pb-24 pt-20">
+      <section className="relative px-6 pb-32 pt-20 overflow-hidden">
         <div className="mx-auto max-w-7xl">
-          <div className="grid gap-12 md:grid-cols-2 md:items-center">
+          <div className="relative min-h-[600px]">
             {/* Left Column: Header and Buttons */}
-            <div>
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-4 py-1.5">
-                <span className="text-xs font-medium text-gray-600">
+            <div className="relative z-10 max-w-xl">
+              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-4 py-1.5 shadow-sm">
+                <span className="text-xs font-medium text-blue-700">
                   Now in Public Beta
                 </span>
               </div>
 
-              <h1 className="text-5xl font-extrabold leading-tight tracking-tight text-gray-900 sm:text-6xl">
-                Build Web Apps
+              <h1 className="text-5xl font-extrabold leading-tight tracking-tight text-blue-900 sm:text-6xl lg:text-7xl">
+                Build Admin
                 <br />
-                <span className="text-gray-400">With AI</span>
+                Dashboards
+                <br />
+                <span className="bg-gradient-to-r from-blue-600 to-blue-400 bg-clip-text text-transparent">with AI</span>
               </h1>
 
-              <p className="mt-6 text-lg leading-relaxed text-gray-500">
-                Describe what you want in plain English. OpenDash turns your ideas
-                into production-ready dashboards, admin panels, and internal tools —
-                no coding required.
+              <p className="mt-8 text-lg leading-relaxed text-blue-700 max-w-md">
+                Create powerful admin panels and internal tools using natural language. No coding required.
               </p>
-
-              <div className="mt-10 flex flex-col gap-4 sm:flex-row">
-                <Link href="/signup">
-                  <Button
-                    size="lg"
-                    data-test-id="landing-hero-cta"
-                    className="h-12 bg-gray-900 px-8 text-base font-semibold text-white hover:bg-gray-800"
-                  >
-                    Start Building Free
-                    <ArrowRight size={18} className="ml-2" />
-                  </Button>
-                </Link>
-                <a href="#how-it-works" data-test-id="landing-hero-demo-link">
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    data-test-id="landing-hero-demo"
-                    className="h-12 border-gray-300 px-8 text-base font-semibold text-gray-700 hover:bg-gray-50"
-                  >
-                    See How It Works
-                  </Button>
-                </a>
-              </div>
             </div>
 
-            {/* Right Column: Dashboard Preview Mockup */}
-            <div className="relative">
-              <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
-                {/* Browser Chrome */}
-                <div className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3">
-                  <div className="h-3 w-3 rounded-full bg-gray-300" />
-                  <div className="h-3 w-3 rounded-full bg-gray-300" />
-                  <div className="h-3 w-3 rounded-full bg-gray-300" />
+            {/* Floating Cards - Positioned Absolutely */}
+            {/* Trophy/Badge Card - Top Left */}
+            <Card className="absolute left-0 top-32 z-20 w-48 border-blue-100 bg-white p-4 shadow-xl">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-yellow-100">
+                  <span className="text-2xl">🏆</span>
                 </div>
+                <div>
+                  <p className="text-xs font-medium text-blue-600">#1</p>
+                  <p className="text-sm font-semibold text-blue-900">Best website using</p>
+                  <p className="text-xs text-blue-600">AI for E-Commerce</p>
+                </div>
+              </div>
+            </Card>
 
-                {/* Dashboard Content */}
+            {/* Main Dashboard Mockup - Right Side */}
+            <div className="absolute right-0 top-0 z-10 w-80">
+              <div className="overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-2xl">
+                <div className="flex items-center gap-2 border-b border-blue-100 bg-blue-50 px-4 py-3">
+                  <div className="h-3 w-3 rounded-full bg-blue-300" />
+                  <div className="h-3 w-3 rounded-full bg-blue-300" />
+                  <div className="h-3 w-3 rounded-full bg-blue-300" />
+                </div>
                 <div className="p-6">
-                  {/* Header */}
-                  <div className="mb-6 flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        Sales Dashboard
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        Built in 30 seconds with AI
-                      </p>
-                    </div>
-                    <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
-                      Live
-                    </Badge>
+                  <div className="mb-4">
+                    <h3 className="text-lg font-semibold text-blue-900">Sales Dashboard</h3>
+                    <p className="text-xs text-blue-600">Built in 30 seconds with AI</p>
                   </div>
-
-                  {/* Stats Cards */}
-                  <div className="mb-6 grid grid-cols-3 gap-3">
-                    <Card className="border-gray-200 p-4">
-                      <div className="mb-2 flex items-center justify-between">
-                        <span className="text-xs font-medium text-gray-500">
-                          Revenue
-                        </span>
-                        <BarChart3 size={16} className="text-gray-400" />
+                  <div className="space-y-3">
+                    <Card className="border-blue-100 p-3 shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-blue-600">Revenue</span>
+                        <BarChart3 size={14} className="text-blue-400" />
                       </div>
-                      <p className="text-xl font-bold text-gray-900">$45.2k</p>
-                      <p className="mt-1 text-xs text-green-600">+12.5%</p>
+                      <p className="mt-1 text-lg font-bold text-blue-900">$45.2k</p>
+                      <p className="text-xs text-green-600">+12.5%</p>
                     </Card>
-
-                    <Card className="border-gray-200 p-4">
-                      <div className="mb-2 flex items-center justify-between">
-                        <span className="text-xs font-medium text-gray-500">
-                          Users
-                        </span>
-                        <Users size={16} className="text-gray-400" />
-                      </div>
-                      <p className="text-xl font-bold text-gray-900">2,341</p>
-                      <p className="mt-1 text-xs text-green-600">+8.2%</p>
-                    </Card>
-
-                    <Card className="border-gray-200 p-4">
-                      <div className="mb-2 flex items-center justify-between">
-                        <span className="text-xs font-medium text-gray-500">
-                          Growth
-                        </span>
-                        <TrendingUp size={16} className="text-gray-400" />
-                      </div>
-                      <p className="text-xl font-bold text-gray-900">23.1%</p>
-                      <p className="mt-1 text-xs text-green-600">+4.3%</p>
-                    </Card>
-                  </div>
-
-                  {/* Chart Placeholder */}
-                  <Card className="border-gray-200 p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <span className="text-sm font-semibold text-gray-900">
-                        Monthly Performance
-                      </span>
-                      <Badge variant="outline" className="text-xs">
-                        2024
-                      </Badge>
-                    </div>
-                    <div className="flex h-32 items-end gap-2">
+                    <div className="flex h-24 items-end gap-1">
                       {[40, 65, 45, 80, 55, 90, 70, 85].map((height, i) => (
                         <div
                           key={i}
-                          className="flex-1 rounded-t bg-gray-900"
+                          className="flex-1 rounded-t bg-blue-600"
                           style={{ height: `${height}%` }}
                         />
                       ))}
                     </div>
-                  </Card>
-
-                  {/* Action Buttons */}
-                  <div className="mt-4 flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1 text-xs"
-                      data-test-id="landing-hero-mockup-export"
-                    >
-                      Export Data
-                    </Button>
-                    <Button size="sm" className="flex-1 bg-gray-900 text-xs" data-test-id="landing-hero-mockup-details">
-                      View Details
-                    </Button>
                   </div>
                 </div>
               </div>
-
-              {/* Floating AI Badge */}
-              <div className="absolute -right-4 -top-4 rounded-full border-2 border-white bg-gray-900 p-3 shadow-lg">
-                <Bot size={20} className="text-white" />
-              </div>
             </div>
+
+            {/* Time Increase Card - Top Right */}
+            <Card className="absolute right-4 top-56 z-20 w-44 border-blue-900 bg-blue-900 p-4 shadow-xl">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp size={16} className="text-white" />
+                <span className="text-xs font-medium text-blue-200">Time increase</span>
+              </div>
+              <div className="flex h-16 items-end gap-1">
+                {[30, 50, 40, 70, 60, 85].map((height, i) => (
+                  <div
+                    key={i}
+                    className="flex-1 rounded-t bg-blue-400"
+                    style={{ height: `${height}%` }}
+                  />
+                ))}
+              </div>
+              <p className="mt-2 text-2xl font-bold text-white">5<span className="text-sm">second</span></p>
+            </Card>
+
+            {/* User Count Card - Bottom Center */}
+            <Card className="absolute bottom-0 left-1/2 -translate-x-1/2 z-20 w-56 border-blue-100 bg-white p-4 shadow-xl">
+              <div className="flex items-center gap-3">
+                <div className="flex -space-x-2">
+                  <div className="h-10 w-10 rounded-full border-2 border-white bg-blue-400" />
+                  <div className="h-10 w-10 rounded-full border-2 border-white bg-blue-500" />
+                  <div className="h-10 w-10 rounded-full border-2 border-white bg-blue-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-blue-900">100K+</p>
+                  <p className="text-xs text-blue-600">SATISFIED USERS</p>
+                </div>
+              </div>
+            </Card>
           </div>
         </div>
       </section>
 
       {/* ─── Trusted By ─────────────────────────────────── */}
-      <section className="border-y border-gray-100 bg-gray-50 px-6 py-12">
+      <section className="border-y border-blue-200 bg-white/50 px-6 py-12">
         <div className="mx-auto max-w-6xl">
-          <p className="mb-8 text-center text-xs font-semibold uppercase tracking-widest text-gray-400">
+          <p className="mb-8 text-center text-xs font-semibold uppercase tracking-widest text-blue-400">
             Trusted by teams at
           </p>
           <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-4">
@@ -348,7 +300,7 @@ export default function LandingPage() {
               (name) => (
                 <span
                   key={name}
-                  className="text-lg font-bold tracking-tight text-gray-300"
+                  className="text-lg font-bold tracking-tight text-blue-300"
                 >
                   {name}
                 </span>
@@ -362,10 +314,10 @@ export default function LandingPage() {
       <section id="features" className="px-6 py-24">
         <div className="mx-auto max-w-6xl">
           <div className="text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+            <h2 className="text-3xl font-bold tracking-tight text-blue-900">
               Everything you need to build fast
             </h2>
-            <p className="mx-auto mt-4 max-w-xl text-base text-gray-500">
+            <p className="mx-auto mt-4 max-w-xl text-base text-blue-700">
               OpenDash combines AI intelligence with enterprise-grade
               infrastructure so you can ship internal tools in minutes.
             </p>
@@ -375,15 +327,15 @@ export default function LandingPage() {
             {FEATURES.map((feature) => (
               <div
                 key={feature.title}
-                className="rounded-xl border border-gray-100 bg-white p-6"
+                className="rounded-2xl border border-blue-100 bg-white p-6 shadow-lg hover:shadow-xl transition-shadow"
               >
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 text-gray-700">
+                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
                   {ICON_MAP[feature.icon] ?? <Bot size={24} />}
                 </div>
-                <h3 className="text-base font-semibold text-gray-900">
+                <h3 className="text-base font-semibold text-blue-900">
                   {feature.title}
                 </h3>
-                <p className="mt-2 text-sm leading-relaxed text-gray-500">
+                <p className="mt-2 text-sm leading-relaxed text-blue-700">
                   {feature.description}
                 </p>
               </div>
@@ -393,13 +345,13 @@ export default function LandingPage() {
       </section>
 
       {/* ─── How It Works ───────────────────────────────── */}
-      <section id="how-it-works" className="border-y border-gray-100 bg-gray-50 px-6 py-24">
+      <section id="how-it-works" className="border-y border-blue-200 bg-white/50 px-6 py-24">
         <div className="mx-auto max-w-6xl">
           <div className="text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+            <h2 className="text-3xl font-bold tracking-tight text-blue-900">
               Three steps to your app
             </h2>
-            <p className="mx-auto mt-4 max-w-xl text-base text-gray-500">
+            <p className="mx-auto mt-4 max-w-xl text-base text-blue-700">
               No setup, no boilerplate, no deployment headaches.
             </p>
           </div>
@@ -407,13 +359,13 @@ export default function LandingPage() {
           <div className="mt-16 grid gap-8 sm:grid-cols-3">
             {STEPS.map((step) => (
               <div key={step.number} className="text-center">
-                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-gray-900 text-lg font-bold text-white">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-lg font-bold text-white shadow-md">
                   {step.number}
                 </div>
-                <h3 className="text-base font-semibold text-gray-900">
+                <h3 className="text-base font-semibold text-blue-900">
                   {step.title}
                 </h3>
-                <p className="mt-2 text-sm leading-relaxed text-gray-500">
+                <p className="mt-2 text-sm leading-relaxed text-blue-700">
                   {step.description}
                 </p>
               </div>
@@ -426,24 +378,24 @@ export default function LandingPage() {
       <section id="pricing" className="px-6 py-24">
         <div className="mx-auto max-w-6xl">
           <div className="text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+            <h2 className="text-3xl font-bold tracking-tight text-blue-900">
               Simple, transparent pricing
             </h2>
-            <p className="mx-auto mt-4 max-w-xl text-base text-gray-500">
+            <p className="mx-auto mt-4 max-w-xl text-base text-blue-700">
               Start free. Scale when you are ready.
             </p>
           </div>
 
           <div className="mx-auto mt-16 grid max-w-4xl gap-8 sm:grid-cols-2">
             {/* Free tier */}
-            <div className="rounded-xl border border-gray-200 bg-white p-8">
-              <h3 className="text-lg font-semibold text-gray-900">Free</h3>
-              <p className="mt-1 text-sm text-gray-500">
+            <div className="rounded-2xl border border-blue-200 bg-white p-8 shadow-lg hover:shadow-xl transition-shadow">
+              <h3 className="text-lg font-semibold text-blue-900">Free</h3>
+              <p className="mt-1 text-sm text-blue-600">
                 For individuals and small projects
               </p>
               <p className="mt-6">
-                <span className="text-4xl font-bold text-gray-900">$0</span>
-                <span className="text-sm text-gray-500"> / month</span>
+                <span className="text-4xl font-bold text-blue-900">$0</span>
+                <span className="text-sm text-blue-600"> / month</span>
               </p>
               <ul className="mt-8 space-y-3">
                 {[
@@ -454,9 +406,9 @@ export default function LandingPage() {
                 ].map((item) => (
                   <li
                     key={item}
-                    className="flex items-center gap-2 text-sm text-gray-600"
+                    className="flex items-center gap-2 text-sm text-blue-700"
                   >
-                    <CheckCircle2 size={16} className="text-gray-400" />
+                    <CheckCircle2 size={16} className="text-blue-400" />
                     {item}
                   </li>
                 ))}
@@ -465,7 +417,7 @@ export default function LandingPage() {
                 <Button
                   variant="outline"
                   data-test-id="landing-pricing-free"
-                  className="w-full border-gray-300 font-medium"
+                  className="w-full border-blue-300 font-medium hover:bg-blue-50"
                 >
                   Get Started
                 </Button>
@@ -473,19 +425,19 @@ export default function LandingPage() {
             </div>
 
             {/* Pro tier */}
-            <div className="rounded-xl border-2 border-gray-900 bg-white p-8">
+            <div className="rounded-2xl border-2 border-blue-600 bg-white p-8 shadow-xl">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Pro</h3>
-                <span className="rounded-full bg-gray-900 px-3 py-0.5 text-xs font-medium text-white">
+                <h3 className="text-lg font-semibold text-blue-900">Pro</h3>
+                <span className="rounded-full bg-blue-600 px-3 py-0.5 text-xs font-medium text-white">
                   Popular
                 </span>
               </div>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-blue-600">
                 For teams and production apps
               </p>
               <p className="mt-6">
-                <span className="text-4xl font-bold text-gray-900">$29</span>
-                <span className="text-sm text-gray-500"> / month</span>
+                <span className="text-4xl font-bold text-blue-900">$29</span>
+                <span className="text-sm text-blue-600"> / month</span>
               </p>
               <ul className="mt-8 space-y-3">
                 {[
@@ -498,9 +450,9 @@ export default function LandingPage() {
                 ].map((item) => (
                   <li
                     key={item}
-                    className="flex items-center gap-2 text-sm text-gray-600"
+                    className="flex items-center gap-2 text-sm text-blue-700"
                   >
-                    <CheckCircle2 size={16} className="text-gray-900" />
+                    <CheckCircle2 size={16} className="text-blue-600" />
                     {item}
                   </li>
                 ))}
@@ -508,7 +460,7 @@ export default function LandingPage() {
               <Link href="/signup" className="mt-8 block">
                 <Button
                   data-test-id="landing-pricing-pro"
-                  className="w-full bg-gray-900 font-medium text-white hover:bg-gray-800"
+                  className="w-full bg-blue-600 font-medium text-white hover:bg-blue-700 shadow-md"
                 >
                   Start Free Trial
                 </Button>
@@ -519,12 +471,12 @@ export default function LandingPage() {
       </section>
 
       {/* ─── CTA ────────────────────────────────────────── */}
-      <section className="border-t border-gray-100 bg-gray-50 px-6 py-24">
+      <section className="border-t border-blue-200 bg-white/50 px-6 py-24">
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+          <h2 className="text-3xl font-bold tracking-tight text-blue-900">
             Ready to build your next app?
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-base text-gray-500">
+          <p className="mx-auto mt-4 max-w-xl text-base text-blue-700">
             Join thousands of teams using OpenDash to ship internal tools,
             dashboards, and admin panels faster than ever.
           </p>
@@ -533,7 +485,7 @@ export default function LandingPage() {
               <Button
                 size="lg"
                 data-test-id="landing-cta-signup"
-                className="h-12 bg-gray-900 px-8 text-base font-semibold text-white hover:bg-gray-800"
+                className="h-12 bg-blue-600 px-8 text-base font-semibold text-white hover:bg-blue-700 shadow-lg hover:shadow-xl transition-shadow"
               >
                 Start Building Free
                 <ArrowRight size={18} className="ml-2" />
@@ -544,18 +496,18 @@ export default function LandingPage() {
       </section>
 
       {/* ─── Footer ─────────────────────────────────────── */}
-      <footer className="border-t border-gray-200 bg-white px-6 py-16">
+      <footer className="border-t border-blue-200 bg-white px-6 py-16">
         <div className="mx-auto max-w-6xl">
           <div className="grid gap-8 sm:grid-cols-4">
             {/* Brand */}
             <div>
               <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-900">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
                   <LayoutDashboard size={14} className="text-white" />
                 </div>
                 <span className="text-sm font-bold">OpenDash</span>
               </div>
-              <p className="mt-3 text-xs leading-relaxed text-gray-500">
+              <p className="mt-3 text-xs leading-relaxed text-blue-600">
                 The AI-powered web builder for teams that move fast.
               </p>
             </div>
@@ -563,7 +515,7 @@ export default function LandingPage() {
             {/* Link sections */}
             {FOOTER_SECTIONS.map((section) => (
               <div key={section.title}>
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-blue-400">
                   {section.title}
                 </h4>
                 <ul className="mt-3 space-y-2">
@@ -571,7 +523,7 @@ export default function LandingPage() {
                     <li key={link.label}>
                       <a
                         href={link.href}
-                        className="text-sm text-gray-500 transition-colors hover:text-gray-900"
+                        className="text-sm text-blue-600 transition-colors hover:text-blue-900"
                         data-test-id={`landing-footer-${link.label.toLowerCase().replace(/\s+/g, '-')}`}
                       >
                         {link.label}
@@ -583,7 +535,7 @@ export default function LandingPage() {
             ))}
           </div>
 
-          <div className="mt-12 border-t border-gray-100 pt-6 text-center text-xs text-gray-400">
+          <div className="mt-12 border-t border-blue-100 pt-6 text-center text-xs text-blue-400">
             &copy; {new Date().getFullYear()} OpenDash. All rights reserved.
           </div>
         </div>

@@ -164,7 +164,7 @@ test.describe.serial("Conversation: Gray container with Dashboard header", () =>
     // Should be a gray color (all RGB values similar and high)
     const rgbMatch = containerBg.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
     if (rgbMatch) {
-      const [_, r, g, b] = rgbMatch.map(Number);
+      const [, r, g, b] = rgbMatch.map(Number);
       console.log(`  RGB values: R=${r}, G=${g}, B=${b}`);
       // Gray colors have similar R, G, B values
       expect(Math.abs(r - g)).toBeLessThan(20);

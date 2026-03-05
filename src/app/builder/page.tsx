@@ -1,10 +1,10 @@
 import { Suspense } from "react";
-import HomePage from "@/presentation/home";
+import BuilderShell from "@/presentation/builder";
 
 export default function BuilderPage() {
   return (
     <Suspense>
-      <HomePage />
+      <BuilderShell />
     </Suspense>
   );
 }

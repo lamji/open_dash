@@ -7,7 +7,7 @@
  * Everything persisted to DB — no hardcoding.
  */
 
-const BASE2 = process.env.BASE_URL || "http://localhost:3000";
+const BASE = process.env.BASE_URL || "http://localhost:3000";
 const SLUG = "dashboard";
 
 let stepNum = 0;
