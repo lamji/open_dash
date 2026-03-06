@@ -4,6 +4,44 @@ import { prisma } from "@/lib/prisma";
 import { validateSession, SESSION_COOKIE_NAME } from "@/lib/auth";
 import type { LayoutBlock } from "@/domain/builder/types";
 
+function updateBlockInTree(
+  blocks: LayoutBlock[],
+  blockId: string,
+  updater: (block: LayoutBlock) => LayoutBlock
+): { blocks: LayoutBlock[]; updated: boolean } {
+  console.log(`Debug flow: updateBlockInTree (route) fired with`, { blockId, blockCount: blocks.length });
+  let updated = false;
+  const nextBlocks = blocks.map((block) => {
+    if (block.id === blockId) {
+      updated = true;
+      return updater(block);
+    }
+
+    let childUpdated = false;
+    const nextSlots = block.slots.map((slot) => {
+      const childBlocks = slot.childBlocks ?? [];
+      if (childBlocks.length === 0) {
+        return slot;
+      }
+      const result = updateBlockInTree(childBlocks, blockId, updater);
+      if (!result.updated) {
+        return slot;
+      }
+      childUpdated = true;
+      return { ...slot, childBlocks: result.blocks };
+    });
+
+    if (!childUpdated) {
+      return block;
+    }
+
+    updated = true;
+    return { ...block, slots: nextSlots };
+  });
+
+  return { blocks: updated ? nextBlocks : blocks, updated };
+}
+
 async function getAuthenticatedUserId(): Promise<string | null> {
   console.log(`Debug flow: getAuthenticatedUserId (blocks/styles) fired`);
   const cookieStore = await cookies();
@@ -44,7 +82,20 @@ export async function PATCH(request: NextRequest) {
     let finalLayoutId = layoutId;
     let layout: LayoutBlock[] = [];
 
-    if (layoutId) {
+    if (blocks && blocks.length > 0) {
+      layout = blocks;
+      if (!layoutId) {
+        console.log(`Debug flow: PATCH /api/builder/blocks/styles creating draft layout`, { blockCount: blocks.length });
+        const draftRecord = await prisma.dashboardLayout.create({
+          data: {
+            name: "Draft Layout",
+            layout: JSON.stringify(layout),
+          },
+        });
+        finalLayoutId = draftRecord.id;
+        console.log(`Debug flow: PATCH /api/builder/blocks/styles draft created`, { layoutId: finalLayoutId });
+      }
+    } else if (layoutId) {
       const record = await prisma.dashboardLayout.findUnique({ where: { id: layoutId } });
       if (!record) {
         return NextResponse.json({ ok: false, error: "Layout not found" }, { status: 404 });
@@ -55,17 +106,6 @@ export async function PATCH(request: NextRequest) {
       } catch {
         return NextResponse.json({ ok: false, error: "Invalid layout JSON" }, { status: 500 });
       }
-    } else if (blocks && blocks.length > 0) {
-      console.log(`Debug flow: PATCH /api/builder/blocks/styles creating draft layout`, { blockCount: blocks.length });
-      layout = blocks;
-      const draftRecord = await prisma.dashboardLayout.create({
-        data: {
-          name: "Draft Layout",
-          layout: JSON.stringify(layout),
-        },
-      });
-      finalLayoutId = draftRecord.id;
-      console.log(`Debug flow: PATCH /api/builder/blocks/styles draft created`, { layoutId: finalLayoutId });
     } else {
       return NextResponse.json(
         { ok: false, error: "Either layoutId or blocks array is required" },
@@ -73,26 +113,26 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const blockIdx = layout.findIndex((b) => b.id === blockId);
-    if (blockIdx === -1) {
+    const result = updateBlockInTree(layout, blockId, (block) => {
+      const styles = block.columnStyles ? [...block.columnStyles] : Array.from({ length: block.slots.length }, () => "");
+      if (slotIdx >= 0) {
+        while (styles.length <= slotIdx) styles.push("");
+        styles[slotIdx] = css;
+      }
+      return {
+        ...block,
+        ...(slotIdx >= 0 ? { columnStyles: styles } : { blockStyles: css || block.blockStyles }),
+        ...(gridRatio !== undefined ? { gridRatio } : {}),
+      };
+    });
+
+    if (!result.updated) {
       return NextResponse.json({ ok: false, error: "Block not found in layout" }, { status: 404 });
     }
 
-    const block = layout[blockIdx];
-    const styles = block.columnStyles ? [...block.columnStyles] : Array.from({ length: block.slots.length }, () => "");
-
-    while (styles.length <= slotIdx) styles.push("");
-    styles[slotIdx] = css;
-
-    layout[blockIdx] = {
-      ...block,
-      columnStyles: styles,
-      ...(gridRatio !== undefined ? { gridRatio } : {})
-    };
-
     await prisma.dashboardLayout.update({
       where: { id: finalLayoutId },
-      data: { layout: JSON.stringify(layout) },
+      data: { layout: JSON.stringify(result.blocks) },
     });
 
     console.log(`Debug flow: PATCH /api/builder/blocks/styles updated layout`, { layoutId: finalLayoutId, blockId, slotIdx });

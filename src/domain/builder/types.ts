@@ -12,13 +12,24 @@ export interface PlacedWidget {
   functionCode?: string;
 }
 
+export interface LayoutSlot {
+  widget: PlacedWidget | null;
+  childBlocks?: LayoutBlock[];
+}
+
+export type LayoutDisplay = "grid" | "flex";
+
 export interface LayoutBlock {
   id: string;
   type: LayoutType;
-  slots: (PlacedWidget | null)[];
+  slots: LayoutSlot[];
   blockStyles?: string;  // CSS for the block container itself
   columnStyles?: string[];  // CSS for each slot/column within the block
   gridRatio?: string;  // CSS grid-template-columns value (e.g., "7fr 5fr")
+  layoutDisplay?: LayoutDisplay;
+  justifyContent?: string;
+  alignItems?: string;
+  gap?: string;
 }
 
 export interface BlockStyleEditorState {

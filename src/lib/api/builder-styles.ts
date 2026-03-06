@@ -64,14 +64,15 @@ export async function generateAiStyle(
     category: string;
     title: string;
     widgetData: Record<string, unknown>;
-  }
+  },
+  mode?: "styles"
 ): Promise<GenerateAiStyleResponse> {
-  console.log(`Debug flow: generateAiStyle fired with`, { blockId, slotIdx, blockType, message, widget });
+  console.log(`Debug flow: generateAiStyle fired with`, { blockId, slotIdx, blockType, message, widget, mode });
   try {
     const res = await fetch("/api/builder/ai-style", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ blockId, slotIdx, blockType, currentCss, message, history, widget }),
+      body: JSON.stringify({ blockId, slotIdx, blockType, currentCss, message, history, widget, mode }),
     });
     const data = await res.json();
     console.log(`Debug flow: generateAiStyle response`, { ok: data.ok, cssLength: data.css?.length });
@@ -89,14 +90,15 @@ export async function generateAiWidgetUpdate(
   widgetId: string,
   category: string,
   message: string,
-  history: GroqChatMessage[]
+  history: GroqChatMessage[],
+  mode?: "data" | "config"
 ): Promise<GenerateAiWidgetUpdateResponse> {
-  console.log(`Debug flow: generateAiWidgetUpdate fired with`, { blockId, slotIdx, widgetId, category, message });
+  console.log(`Debug flow: generateAiWidgetUpdate fired with`, { blockId, slotIdx, widgetId, category, message, mode });
   try {
     const res = await fetch("/api/builder/ai-widget-update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ blockId, slotIdx, currentWidgetData, widgetId, category, message, history }),
+      body: JSON.stringify({ blockId, slotIdx, currentWidgetData, widgetId, category, message, history, mode }),
     });
     const data = await res.json();
     console.log(`Debug flow: generateAiWidgetUpdate response`, { ok: data.ok, hasWidgetData: !!data.widgetData });

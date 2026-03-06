@@ -106,6 +106,7 @@ interface WidgetUpdateRequest {
   category: string;
   message: string;
   history: GroqChatMessage[];
+  mode?: "data" | "config";
 }
 
 interface WidgetUpdateResponse {
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<WidgetUpd
 
   try {
     const body = await request.json() as WidgetUpdateRequest;
-    const { currentWidgetData, widgetId, category, message, history } = body;
+    const { currentWidgetData, widgetId, category, message, history, mode } = body;
 
     if (!message || typeof message !== "string") {
       return NextResponse.json({ ok: false, error: "message is required" }, { status: 400 });
@@ -131,11 +132,26 @@ export async function POST(request: NextRequest): Promise<NextResponse<WidgetUpd
       currentDataKeys: Object.keys(currentWidgetData) 
     });
 
+    const tableConfigKnowledge = mode === "config" ? `
+## CONFIG MODE — Table Widget Configuration
+When in config mode (mode="config"), you may modify:
+- Row structure: add/edit/remove rows
+- Column headers/names: add new columns, rename existing ones
+- Cell values and statuses
+- Status colors and styling values
+- Sorting/pagination metadata (if widget supports it)
+- Widget title and labels
+
+For table widgets (orders-table, customers-table, transactions-table, inventory-table), the "rows" array structure is the primary data point. You can expand rows, add new fields to each row object, or change values.
+` : "";
+
     const systemPrompt = `${WIDGET_DATA_KNOWLEDGE}
+${tableConfigKnowledge}
 
 CURRENT WIDGET:
 - Widget ID: ${widgetId}
 - Category: ${category}
+${mode === "config" ? "- Mode: CONFIG (widget configuration/structure)" : mode === "data" ? "- Mode: DATA (widget values/content)" : ""}
 
 CURRENT WIDGET DATA:
 ${JSON.stringify(currentWidgetData, null, 2)}

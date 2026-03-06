@@ -16,22 +16,31 @@ import {
 import {
   useReactTable,
   getCoreRowModel,
+  getSortedRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
   flexRender,
   type ColumnDef,
+  type Table,
+  type ColumnFiltersState,
 } from "@tanstack/react-table";
 import {
   Copy, Check, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight,
   DollarSign, Users, Target, BarChart3, Activity, PieChart, Calendar,
   ShoppingCart, Clock, Zap, Star, Bell, AlertTriangle, Trophy,
   Filter, Award, LayoutDashboard, ChevronRight,
-  Search, Plus, ChevronDown,
+  Search, Plus, ChevronDown, ArrowUp, ArrowDown, ArrowUpDown, Eye, Upload,
+  ChevronLeft, ChevronRight as ChevronRightIcon, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { DynamicIcon } from "@/lib/component-registry";
 import { useWidgets } from "./useWidgets";
-import type { WidgetCategoryInfo, WidgetCategory } from "@/domain/widgets/types";
+import { useTableState } from "./useTableState";
+import { Input } from "@/components/ui/input";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import type { WidgetCategoryInfo, WidgetCategory, TableFeatureConfig, TableWidgetConfig, Lead, LeadStatus, LeadsTableConfig } from "@/domain/widgets/types";
 import type { WidgetTemplate } from "./useWidgets";
 
 export const WIDGET_CATEGORIES: WidgetCategoryInfo[] = [
@@ -100,14 +109,18 @@ function TabBarWidget({ data }: { data: Record<string, unknown> }) {
 
 function ToggleWidget({ data }: { data: Record<string, unknown> }) {
   const options = (data.options as string[]) ?? ["List", "Grid", "Kanban"];
-  const [selected, setSelected] = useState((data.selected as string) ?? options[0]);
+  const selected = (data.selected as string) ?? options[0];
+  console.log(`Debug flow: ToggleWidget fired with`, { optionCount: options.length, selected });
   return (
-    <div className="flex flex-col h-full gap-2" data-test-id="toggle-button-group-container">
+    <div className="flex flex-col h-full justify-center gap-3" data-test-id="toggle-button-group-container">
       <p className="text-xs text-slate-500" data-test-id="toggle-button-group-label">View Mode</p>
-      <div className="flex p-1 bg-slate-100 rounded-lg gap-1" data-test-id="toggle-button-group-bar">
-        {options.map((opt, i) => (
-          <button key={i} onClick={() => setSelected(opt)} className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${opt === selected ? "bg-white shadow-sm text-slate-800" : "text-slate-500 hover:text-slate-700"}`} data-test-id={`toggle-button-group-opt-${i}`}>{opt}</button>
-        ))}
+      <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-3" data-test-id="toggle-button-group-bar">
+        <div className="inline-flex items-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white" data-test-id="toggle-button-group-active">
+          {selected}
+        </div>
+        <p className="mt-2 text-[11px] text-slate-500" data-test-id="toggle-button-group-meta">
+          {options.length} layout modes available
+        </p>
       </div>
     </div>
   );
@@ -195,151 +208,1589 @@ function KpiCard({ data, iconEl }: { data: PD; iconEl: React.ReactElement }) {
 
 /* ─── TanStack table widget components ──────────────────────── */
 
-type OrderRow = { id: string; customer: string; amount: string; status: string };
-function OrdersTableWidget({ data }: { data: Record<string, unknown> }) {
+type OrderRow = { id: string; customer: string; amount: string; status: string | { value: string; options?: unknown[] } };
+type HeaderContext = { column: { id: string; getIsSorted: () => false | "asc" | "desc"; toggleSorting: (desc?: boolean) => void } };
+type CellContext = { getValue: () => unknown; row: { id: string; original: OrderRow; getIsSelected: () => boolean; toggleSelected: (value?: boolean) => void } };
+
+function OrdersTableWidget({ data, preview = false }: { data: Record<string, unknown>; preview?: boolean }) {
   "use no memo";
-  const rows: OrderRow[] = (data.rows as OrderRow[]) ?? [
+  const config = data as TableWidgetConfig;
+  const allRows: OrderRow[] = (config.rows as OrderRow[]) ?? [
     { id: "ORD-001", customer: "Alice Johnson", amount: "$129.00", status: "Completed" },
     { id: "ORD-002", customer: "Bob Smith",     amount: "$64.50",  status: "Pending" },
     { id: "ORD-003", customer: "Carol White",   amount: "$512.00", status: "Failed" },
     { id: "ORD-004", customer: "Dave Brown",    amount: "$89.99",  status: "Completed" },
   ];
-  const title = (data.title as string) ?? "Recent Orders";
-  const statusColor: Record<string, string> = { Completed: "text-emerald-700 bg-emerald-50", Pending: "text-yellow-700 bg-yellow-50", Failed: "text-red-700 bg-red-50" };
+
+  // In preview mode, show only 2 rows and disable all interactive features
+  const rows = preview ? allRows.slice(0, 2) : allRows;
+  const features: TableFeatureConfig = preview
+    ? {
+        sorting: false,
+        filtering: false,
+        pagination: false,
+        columnVisibility: false,
+        columnResizing: false,
+        rowSelection: false,
+        expandableRows: false,
+      }
+    : (config.features ?? {
+        sorting: true,
+        filtering: true,
+        pagination: true,
+        columnVisibility: true,
+        columnResizing: true,
+        rowSelection: true,
+        expandableRows: false,
+      });
+
+  const tableState = useTableState();
+  const statusColor: Record<string, string> = {
+    Completed: "text-emerald-700 bg-emerald-50",
+    Pending: "text-yellow-700 bg-yellow-50",
+    Failed: "text-red-700 bg-red-50",
+  };
+
   const columns: ColumnDef<OrderRow>[] = [
-    { accessorKey: "id",       header: "Order",    cell: (i) => <span className="font-mono text-slate-600 text-xs">{i.getValue() as string}</span> },
-    { accessorKey: "customer", header: "Customer", cell: (i) => <span className="text-slate-700 text-xs">{(i.getValue() as string).split(" ")[0]}</span> },
-    { accessorKey: "amount",   header: "Amount",   cell: (i) => <span className="font-semibold text-slate-800 text-xs">{i.getValue() as string}</span> },
-    { accessorKey: "status",   header: "Status",   cell: (i) => <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${statusColor[i.getValue() as string] ?? "text-slate-600 bg-slate-100"}`}>{i.getValue() as string}</span> },
+    ...(features.rowSelection
+      ? [
+          {
+            id: "select",
+            header: ({ table }: { table: Table<OrderRow> }) => (
+              <input
+                type="checkbox"
+                checked={table.getIsAllRowsSelected()}
+                onChange={(e) => {
+                  table.toggleAllRowsSelected(e.target.checked);
+                  if (e.target.checked) {
+                    tableState.selectAllRows(table.getRowModel().rows.map((r) => r.id));
+                  } else {
+                    tableState.clearRowSelection();
+                  }
+                }}
+                className="cursor-pointer"
+                data-test-id="orders-table-select-all"
+              />
+            ),
+            cell: ({ row }: { row: { id: string; getIsSelected: () => boolean; toggleSelected: (value?: boolean) => void } }) => (
+              <input
+                type="checkbox"
+                checked={row.getIsSelected()}
+                onChange={(e) => {
+                  row.toggleSelected(e.target.checked);
+                  tableState.toggleRowSelection(row.id);
+                }}
+                className="cursor-pointer"
+                data-test-id={`orders-table-row-select-${row.id}`}
+              />
+            ),
+            size: 40,
+          },
+        ]
+      : []),
+    {
+      accessorKey: "id",
+      header: features.sorting ? ({ column }: HeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="orders-table-sort-id"
+        >
+          Order
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Order",
+      cell: (i: CellContext) => <span className="font-mono text-slate-600 text-xs">{i.getValue() as string}</span>,
+      size: 80,
+    },
+    {
+      accessorKey: "customer",
+      header: features.sorting ? ({ column }: HeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="orders-table-sort-customer"
+        >
+          Customer
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Customer",
+      cell: (i: CellContext) => <span className="text-slate-700 text-xs">{(i.getValue() as string).split(" ")[0]}</span>,
+    },
+    {
+      accessorKey: "amount",
+      header: features.sorting ? ({ column }: HeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="orders-table-sort-amount"
+        >
+          Amount
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Amount",
+      cell: (i: CellContext) => <span className="font-semibold text-slate-800 text-xs">{i.getValue() as string}</span>,
+    },
+    {
+      accessorKey: "status",
+      header: features.sorting ? ({ column }: HeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="orders-table-sort-status"
+        >
+          Status
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Status",
+      cell: (i: CellContext) => {
+        const cellValue = i.getValue();
+        const statusValue = typeof cellValue === "string" ? cellValue : (cellValue as { value: string })?.value ?? "Unknown";
+        console.log(`[DEBUG] OrdersTableWidget status cell rendered with:`, { cellValue, statusValue });
+        return (
+          <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${statusColor[statusValue] ?? "text-slate-600 bg-slate-100"}`}>
+            {statusValue}
+          </span>
+        );
+      },
+    },
   ];
-  const table = useReactTable({ data: rows, columns, getCoreRowModel: getCoreRowModel() });
-  console.log(`Debug flow: OrdersTableWidget rendered`, { rows: rows.length });
+  const title = config.title ?? "Recent Orders";
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    ...(features.sorting && {
+      getSortedRowModel: getSortedRowModel(),
+      state: { sorting: tableState.sorting },
+      onSortingChange: (updater: ((old: typeof tableState.sorting) => typeof tableState.sorting) | typeof tableState.sorting) => {
+        const newSorting = typeof updater === "function" ? updater(tableState.sorting) : updater;
+        tableState.setSorting(newSorting);
+      },
+    }),
+    ...(features.filtering && {
+      getFilteredRowModel: getFilteredRowModel(),
+      state: { columnFilters: Object.entries(tableState.filtering).map(([id, value]) => ({ id, value })) },
+      onColumnFiltersChange: (updater: ((old: ColumnFiltersState) => ColumnFiltersState) | ColumnFiltersState) => {
+        const newFilters = typeof updater === "function" ? updater([]) : updater;
+        tableState.clearFiltering();
+        newFilters.forEach((f: { id: string; value: unknown }) => {
+          tableState.setFiltering(f.id, f.value as string);
+        });
+      },
+    }),
+    ...(features.pagination && {
+      getPaginationRowModel: getPaginationRowModel(),
+      state: { pagination: tableState.pagination },
+      onPaginationChange: (updater: ((old: { pageIndex: number; pageSize: number }) => { pageIndex: number; pageSize: number }) | { pageIndex: number; pageSize: number }) => {
+        const newState = typeof updater === "function" ? updater(tableState.pagination) : updater;
+        tableState.setPageIndex(newState.pageIndex);
+      },
+    }),
+    ...(features.rowSelection && {
+      state: { rowSelection: tableState.rowSelection },
+      onRowSelectionChange: (updater: ((old: Record<string, boolean>) => Record<string, boolean>) | Record<string, boolean>) => {
+        const newSelection = typeof updater === "function" ? updater(tableState.rowSelection) : updater;
+        tableState.setRowSelection(newSelection);
+      },
+    }),
+  });
+
+  console.log(`[DEBUG] OrdersTableWidget rendered`, { rows: rows.length, features });
+
   return (
-    <div data-test-id="orders-table-container">
-      <p className="text-xs font-semibold text-slate-700 mb-2" data-test-id="orders-table-title">{title}</p>
-      <table className="w-full text-xs" data-test-id="orders-table-table">
-        <thead data-test-id="orders-table-thead">
-          {table.getHeaderGroups().map((hg) => (
-            <tr key={hg.id} data-test-id="orders-table-thead-row">
-              {hg.headers.map((h) => (
-                <th key={h.id} className="text-left py-1 px-1 font-semibold text-slate-500" data-test-id={`orders-table-th-${h.id}`}>
-                  {flexRender(h.column.columnDef.header, h.getContext())}
-                </th>
+    <div data-test-id="orders-table-container" className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-slate-700" data-test-id="orders-table-title">
+          {title}
+        </p>
+        <div className="flex items-center gap-2">
+          {features.filtering && (
+            <Input
+              placeholder="Filter..."
+              value={tableState.filtering["customer"] ?? ""}
+              onChange={(e) => tableState.setFiltering("customer", e.target.value)}
+              className="h-7 text-xs w-40"
+              data-test-id="orders-table-filter-input"
+            />
+          )}
+          {features.columnVisibility && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => {
+                const allVisible = Object.values(table.getState().columnVisibility).every((v) => v !== false);
+                table.toggleAllColumnsVisible(!allVisible);
+              }}
+              data-test-id="orders-table-toggle-all-columns"
+            >
+              <Eye size={12} className="mr-1" />
+              Columns
+            </Button>
+          )}
+          {features.rowSelection && Object.keys(tableState.rowSelection).length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => tableState.clearRowSelection()}
+              data-test-id="orders-table-clear-selection"
+            >
+              <Trash2 size={12} className="mr-1" />
+              Clear
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 overflow-hidden">
+        <table className="w-full text-xs border-collapse" data-test-id="orders-table-table">
+          <thead data-test-id="orders-table-thead">
+            {table.getHeaderGroups().map((hg) => (
+              <tr key={hg.id} className="bg-slate-50 border-b-2 border-slate-200" data-test-id="orders-table-thead-row">
+                {hg.headers.map((h) => (
+                  <th
+                    key={h.id}
+                    className="text-left py-2.5 px-3 font-semibold text-slate-600 uppercase tracking-wide"
+                    data-test-id={`orders-table-th-${h.id}`}
+                    style={{ width: h.getSize() !== 150 ? `${h.getSize()}px` : undefined }}
+                  >
+                    {flexRender(h.column.columnDef.header, h.getContext())}
+                  </th>
+                ))}
+              </tr>
+            ))}
+          </thead>
+          <tbody data-test-id="orders-table-tbody">
+            {table.getRowModel().rows.map((row) => (
+              <tr
+                key={row.id}
+                className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                data-test-id={`orders-table-row-${row.id}`}
+              >
+                {row.getVisibleCells().map((cell) => (
+                  <td key={cell.id} className="py-2.5 px-3" data-test-id={`orders-table-cell-${cell.id}`}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {features.pagination && (
+        <div className="flex items-center justify-between gap-2 py-2" data-test-id="orders-table-pagination">
+          <span className="text-xs text-slate-600" data-test-id="orders-table-page-info">
+            Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => tableState.setPageIndex(table.getState().pagination.pageIndex - 1)}
+              disabled={!table.getCanPreviousPage()}
+              data-test-id="orders-table-prev-page"
+            >
+              <ChevronLeft size={12} />
+            </Button>
+            <select
+              value={table.getState().pagination.pageSize}
+              onChange={(e) => tableState.setPageSize(Number(e.target.value))}
+              className="h-7 px-2 text-xs border border-slate-200 rounded"
+              data-test-id="orders-table-page-size"
+            >
+              {[10, 20, 30, 40, 50].map((size) => (
+                <option key={size} value={size}>
+                  {size} rows
+                </option>
               ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody data-test-id="orders-table-tbody">
-          {table.getRowModel().rows.map((row) => (
-            <tr key={row.id} data-test-id={`orders-table-row-${row.id}`}>
-              {row.getVisibleCells().map((cell) => (
-                <td key={cell.id} className="py-1 px-1" data-test-id={`orders-table-cell-${cell.id}`}>
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+            </select>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => tableState.setPageIndex(table.getState().pagination.pageIndex + 1)}
+              disabled={!table.getCanNextPage()}
+              data-test-id="orders-table-next-page"
+            >
+              <ChevronRightIcon size={12} />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {features.rowSelection && Object.keys(tableState.rowSelection).length > 0 && (
+        <div className="text-xs text-slate-600 bg-blue-50 p-2 rounded" data-test-id="orders-table-selection-info">
+          {Object.keys(tableState.rowSelection).length} row(s) selected
+        </div>
+      )}
     </div>
   );
 }
 
 type CustomerRow = { name: string; email: string; plan: string; spend: string };
-function CustomersTableWidget({ data }: { data: Record<string, unknown> }) {
+type CustomerCellContext = { getValue: () => unknown; row: { id: string; original: CustomerRow; getIsSelected: () => boolean; toggleSelected: (value?: boolean) => void } };
+
+function CustomersTableWidget({ data, preview = false }: { data: Record<string, unknown>; preview?: boolean }) {
   "use no memo";
-  const rows: CustomerRow[] = (data.rows as CustomerRow[]) ?? [
+  const config = data as TableWidgetConfig;
+  const allRows: CustomerRow[] = (config.rows as CustomerRow[]) ?? [
     { name: "Alice Johnson", email: "alice@acme.com", plan: "Pro",        spend: "$1,200" },
     { name: "Bob Smith",     email: "bob@corp.io",    plan: "Enterprise", spend: "$8,400" },
     { name: "Carol White",   email: "carol@shop.co",  plan: "Free",       spend: "$0" },
     { name: "Dave Brown",    email: "dave@dev.ai",    plan: "Pro",        spend: "$1,200" },
   ];
-  const title = (data.title as string) ?? "Customers";
-  const planColor: Record<string, string> = { Pro: "text-violet-700 bg-violet-50", Enterprise: "text-blue-700 bg-blue-50", Free: "text-slate-500 bg-slate-100" };
+
+  // In preview mode, show only 2 rows and disable all interactive features
+  const rows = preview ? allRows.slice(0, 2) : allRows;
+  const title = config.title ?? "Customers";
+  const features: TableFeatureConfig = preview
+    ? {
+        sorting: false,
+        filtering: false,
+        pagination: false,
+        columnVisibility: false,
+        columnResizing: false,
+        rowSelection: false,
+        expandableRows: false,
+      }
+    : (config.features ?? {
+        sorting: true,
+        filtering: true,
+        pagination: true,
+        columnVisibility: true,
+        columnResizing: true,
+        rowSelection: true,
+        expandableRows: false,
+      });
+
+  const tableState = useTableState();
+  const planColor: Record<string, string> = {
+    Pro: "text-violet-700 bg-violet-50",
+    Enterprise: "text-blue-700 bg-blue-50",
+    Free: "text-slate-500 bg-slate-100",
+  };
+
   const columns: ColumnDef<CustomerRow>[] = [
-    { accessorKey: "name",  header: "Name",  cell: (i) => <span className="font-medium text-slate-800 text-xs">{(i.getValue() as string).split(" ")[0]}</span> },
-    { accessorKey: "email", header: "Email", cell: (i) => <span className="text-slate-500 text-xs">{(i.getValue() as string).split("@")[0]}</span> },
-    { accessorKey: "plan",  header: "Plan",  cell: (i) => <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${planColor[i.getValue() as string] ?? "text-slate-600 bg-slate-100"}`}>{i.getValue() as string}</span> },
-    { accessorKey: "spend", header: "Spend", cell: (i) => <span className="font-semibold text-slate-800 text-xs">{i.getValue() as string}</span> },
+    ...(features.rowSelection
+      ? [
+          {
+            id: "select",
+            header: ({ table }: { table: Table<CustomerRow> }) => (
+              <input
+                type="checkbox"
+                checked={table.getIsAllRowsSelected()}
+                onChange={(e) => {
+                  table.toggleAllRowsSelected(e.target.checked);
+                  if (e.target.checked) {
+                    tableState.selectAllRows(table.getRowModel().rows.map((r) => r.id));
+                  } else {
+                    tableState.clearRowSelection();
+                  }
+                }}
+                className="cursor-pointer"
+                data-test-id="customers-table-select-all"
+              />
+            ),
+            cell: ({ row }: { row: { id: string; getIsSelected: () => boolean; toggleSelected: (value?: boolean) => void } }) => (
+              <input
+                type="checkbox"
+                checked={row.getIsSelected()}
+                onChange={(e) => {
+                  row.toggleSelected(e.target.checked);
+                  tableState.toggleRowSelection(row.id);
+                }}
+                className="cursor-pointer"
+                data-test-id={`customers-table-row-select-${row.id}`}
+              />
+            ),
+            size: 40,
+          },
+        ]
+      : []),
+    {
+      accessorKey: "name",
+      header: features.sorting ? ({ column }: HeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="customers-table-sort-name"
+        >
+          Name
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Name",
+      cell: (i: CustomerCellContext) => <span className="font-medium text-slate-800 text-xs">{(i.getValue() as string).split(" ")[0]}</span>,
+    },
+    {
+      accessorKey: "email",
+      header: features.sorting ? ({ column }: HeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="customers-table-sort-email"
+        >
+          Email
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Email",
+      cell: (i: CustomerCellContext) => <span className="text-slate-500 text-xs">{(i.getValue() as string).split("@")[0]}</span>,
+    },
+    {
+      accessorKey: "plan",
+      header: features.sorting ? ({ column }: HeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="customers-table-sort-plan"
+        >
+          Plan
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Plan",
+      cell: (i: CustomerCellContext) => (
+        <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${planColor[i.getValue() as string] ?? "text-slate-600 bg-slate-100"}`}>
+          {i.getValue() as string}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "spend",
+      header: features.sorting ? ({ column }: HeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="customers-table-sort-spend"
+        >
+          Spend
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Spend",
+      cell: (i: CustomerCellContext) => <span className="font-semibold text-slate-800 text-xs">{i.getValue() as string}</span>,
+    },
   ];
-  const table = useReactTable({ data: rows, columns, getCoreRowModel: getCoreRowModel() });
-  console.log(`Debug flow: CustomersTableWidget rendered`, { rows: rows.length });
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    ...(features.sorting && {
+      getSortedRowModel: getSortedRowModel(),
+      state: { sorting: tableState.sorting },
+      onSortingChange: (updater: ((old: typeof tableState.sorting) => typeof tableState.sorting) | typeof tableState.sorting) => {
+        const newSorting = typeof updater === "function" ? updater(tableState.sorting) : updater;
+        tableState.setSorting(newSorting);
+      },
+    }),
+    ...(features.filtering && {
+      getFilteredRowModel: getFilteredRowModel(),
+      state: { columnFilters: Object.entries(tableState.filtering).map(([id, value]) => ({ id, value })) },
+      onColumnFiltersChange: (updater: ((old: ColumnFiltersState) => ColumnFiltersState) | ColumnFiltersState) => {
+        const newFilters = typeof updater === "function" ? updater([]) : updater;
+        tableState.clearFiltering();
+        newFilters.forEach((f: { id: string; value: unknown }) => {
+          tableState.setFiltering(f.id, f.value as string);
+        });
+      },
+    }),
+    ...(features.pagination && {
+      getPaginationRowModel: getPaginationRowModel(),
+      state: { pagination: tableState.pagination },
+      onPaginationChange: (updater: ((old: { pageIndex: number; pageSize: number }) => { pageIndex: number; pageSize: number }) | { pageIndex: number; pageSize: number }) => {
+        const newState = typeof updater === "function" ? updater(tableState.pagination) : updater;
+        tableState.setPageIndex(newState.pageIndex);
+      },
+    }),
+    ...(features.rowSelection && {
+      state: { rowSelection: tableState.rowSelection },
+      onRowSelectionChange: (updater: ((old: Record<string, boolean>) => Record<string, boolean>) | Record<string, boolean>) => {
+        const newSelection = typeof updater === "function" ? updater(tableState.rowSelection) : updater;
+        tableState.setRowSelection(newSelection);
+      },
+    }),
+  });
+
+  console.log(`[DEBUG] CustomersTableWidget rendered`, { rows: rows.length, features });
+
   return (
-    <div data-test-id="customers-table-container">
-      <p className="text-xs font-semibold text-slate-700 mb-2" data-test-id="customers-table-title">{title}</p>
-      <table className="w-full text-xs" data-test-id="customers-table-table">
-        <thead data-test-id="customers-table-thead">
-          {table.getHeaderGroups().map((hg) => (
-            <tr key={hg.id} data-test-id="customers-table-thead-row">
-              {hg.headers.map((h) => (
-                <th key={h.id} className="text-left py-1 px-1 font-semibold text-slate-500" data-test-id={`customers-table-th-${h.id}`}>
-                  {flexRender(h.column.columnDef.header, h.getContext())}
-                </th>
+    <div data-test-id="customers-table-container" className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-slate-700" data-test-id="customers-table-title">
+          {title}
+        </p>
+        <div className="flex items-center gap-2">
+          {features.filtering && (
+            <Input
+              placeholder="Filter..."
+              value={tableState.filtering["name"] ?? ""}
+              onChange={(e) => tableState.setFiltering("name", e.target.value)}
+              className="h-7 text-xs w-40"
+              data-test-id="customers-table-filter-input"
+            />
+          )}
+          {features.columnVisibility && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => {
+                const allVisible = Object.values(table.getState().columnVisibility).every((v) => v !== false);
+                table.toggleAllColumnsVisible(!allVisible);
+              }}
+              data-test-id="customers-table-toggle-all-columns"
+            >
+              <Eye size={12} className="mr-1" />
+              Columns
+            </Button>
+          )}
+          {features.rowSelection && Object.keys(tableState.rowSelection).length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => tableState.clearRowSelection()}
+              data-test-id="customers-table-clear-selection"
+            >
+              <Trash2 size={12} className="mr-1" />
+              Clear
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 overflow-hidden">
+        <table className="w-full text-xs border-collapse" data-test-id="customers-table-table">
+          <thead data-test-id="customers-table-thead">
+            {table.getHeaderGroups().map((hg) => (
+              <tr key={hg.id} className="bg-slate-50 border-b-2 border-slate-200" data-test-id="customers-table-thead-row">
+                {hg.headers.map((h) => (
+                  <th
+                    key={h.id}
+                    className="text-left py-2.5 px-3 font-semibold text-slate-600 uppercase tracking-wide"
+                    data-test-id={`customers-table-th-${h.id}`}
+                    style={{ width: h.getSize() !== 150 ? `${h.getSize()}px` : undefined }}
+                  >
+                    {flexRender(h.column.columnDef.header, h.getContext())}
+                  </th>
+                ))}
+              </tr>
+            ))}
+          </thead>
+          <tbody data-test-id="customers-table-tbody">
+            {table.getRowModel().rows.map((row) => (
+              <tr
+                key={row.id}
+                className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                data-test-id={`customers-table-row-${row.id}`}
+              >
+                {row.getVisibleCells().map((cell) => (
+                  <td key={cell.id} className="py-2.5 px-3" data-test-id={`customers-table-cell-${cell.id}`}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {features.pagination && (
+        <div className="flex items-center justify-between gap-2 py-2" data-test-id="customers-table-pagination">
+          <span className="text-xs text-slate-600" data-test-id="customers-table-page-info">
+            Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => tableState.setPageIndex(table.getState().pagination.pageIndex - 1)}
+              disabled={!table.getCanPreviousPage()}
+              data-test-id="customers-table-prev-page"
+            >
+              <ChevronLeft size={12} />
+            </Button>
+            <select
+              value={table.getState().pagination.pageSize}
+              onChange={(e) => tableState.setPageSize(Number(e.target.value))}
+              className="h-7 px-2 text-xs border border-slate-200 rounded"
+              data-test-id="customers-table-page-size"
+            >
+              {[10, 20, 30, 40, 50].map((size) => (
+                <option key={size} value={size}>
+                  {size} rows
+                </option>
               ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody data-test-id="customers-table-tbody">
-          {table.getRowModel().rows.map((row) => (
-            <tr key={row.id} data-test-id={`customers-table-row-${row.id}`}>
-              {row.getVisibleCells().map((cell) => (
-                <td key={cell.id} className="py-1 px-1" data-test-id={`customers-table-cell-${cell.id}`}>
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+            </select>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => tableState.setPageIndex(table.getState().pagination.pageIndex + 1)}
+              disabled={!table.getCanNextPage()}
+              data-test-id="customers-table-next-page"
+            >
+              <ChevronRightIcon size={12} />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {features.rowSelection && Object.keys(tableState.rowSelection).length > 0 && (
+        <div className="text-xs text-slate-600 bg-blue-50 p-2 rounded" data-test-id="customers-table-selection-info">
+          {Object.keys(tableState.rowSelection).length} row(s) selected
+        </div>
+      )}
     </div>
   );
 }
 
 type TxRow = { date: string; desc: string; amount: string; type: string };
-function TransactionsTableWidget({ data }: { data: Record<string, unknown> }) {
+type TxCellContext = { getValue: () => unknown; row: { id: string; original: TxRow; getIsSelected: () => boolean; toggleSelected: (value?: boolean) => void } };
+
+function TransactionsTableWidget({ data, preview = false }: { data: Record<string, unknown>; preview?: boolean }) {
   "use no memo";
-  const rows: TxRow[] = (data.rows as TxRow[]) ?? [
+  const config = data as TableWidgetConfig;
+  const allRows: TxRow[] = (config.rows as TxRow[]) ?? [
     { date: "Mar 4", desc: "Stripe Payment", amount: "+$1,200",  type: "credit" },
     { date: "Mar 3", desc: "AWS Invoice",    amount: "-$340",    type: "debit" },
     { date: "Mar 3", desc: "Refund #9921",   amount: "+$89",     type: "credit" },
     { date: "Mar 2", desc: "Payroll Run",    amount: "-$12,400", type: "debit" },
   ];
-  const title = (data.title as string) ?? "Transactions";
+
+  // In preview mode, show only 2 rows and disable all interactive features
+  const rows = preview ? allRows.slice(0, 2) : allRows;
+  const title = config.title ?? "Transactions";
+  const features: TableFeatureConfig = preview
+    ? {
+        sorting: false,
+        filtering: false,
+        pagination: false,
+        columnVisibility: false,
+        columnResizing: false,
+        rowSelection: false,
+        expandableRows: false,
+      }
+    : (config.features ?? {
+        sorting: true,
+        filtering: true,
+        pagination: true,
+        columnVisibility: true,
+        columnResizing: true,
+        rowSelection: true,
+        expandableRows: false,
+      });
+
+  const tableState = useTableState();
+
   const columns: ColumnDef<TxRow>[] = [
-    { accessorKey: "date",   header: "Date",   cell: (i) => <span className="text-slate-500 text-xs">{i.getValue() as string}</span> },
-    { accessorKey: "desc",   header: "Desc",   cell: (i) => <span className="text-slate-700 text-xs truncate">{i.getValue() as string}</span> },
-    { accessorKey: "amount", header: "Amount", cell: (i) => { const row = i.row.original; return <span className={`font-bold text-xs ${row.type === "credit" ? "text-emerald-600" : "text-red-500"}`}>{i.getValue() as string}</span>; } },
-    { accessorKey: "type",   header: "Type",   cell: (i) => <span className="text-slate-500 text-xs capitalize">{i.getValue() as string}</span> },
+    ...(features.rowSelection
+      ? [
+          {
+            id: "select",
+            header: ({ table }: { table: Table<TxRow> }) => (
+              <input
+                type="checkbox"
+                checked={table.getIsAllRowsSelected()}
+                onChange={(e) => {
+                  table.toggleAllRowsSelected(e.target.checked);
+                  if (e.target.checked) {
+                    tableState.selectAllRows(table.getRowModel().rows.map((r) => r.id));
+                  } else {
+                    tableState.clearRowSelection();
+                  }
+                }}
+                className="cursor-pointer"
+                data-test-id="transactions-table-select-all"
+              />
+            ),
+            cell: ({ row }: { row: { id: string; getIsSelected: () => boolean; toggleSelected: (value?: boolean) => void } }) => (
+              <input
+                type="checkbox"
+                checked={row.getIsSelected()}
+                onChange={(e) => {
+                  row.toggleSelected(e.target.checked);
+                  tableState.toggleRowSelection(row.id);
+                }}
+                className="cursor-pointer"
+                data-test-id={`transactions-table-row-select-${row.id}`}
+              />
+            ),
+            size: 40,
+          },
+        ]
+      : []),
+    {
+      accessorKey: "date",
+      header: features.sorting ? ({ column }: HeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="transactions-table-sort-date"
+        >
+          Date
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Date",
+      cell: (i: TxCellContext) => <span className="text-slate-500 text-xs">{i.getValue() as string}</span>,
+    },
+    {
+      accessorKey: "desc",
+      header: features.sorting ? ({ column }: HeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="transactions-table-sort-desc"
+        >
+          Desc
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Desc",
+      cell: (i: TxCellContext) => <span className="text-slate-700 text-xs truncate">{i.getValue() as string}</span>,
+    },
+    {
+      accessorKey: "amount",
+      header: features.sorting ? ({ column }: HeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="transactions-table-sort-amount"
+        >
+          Amount
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Amount",
+      cell: (i: TxCellContext) => {
+        const row = i.row.original;
+        return (
+          <span className={`font-bold text-xs ${row.type === "credit" ? "text-emerald-600" : "text-red-500"}`}>
+            {i.getValue() as string}
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: "type",
+      header: features.sorting ? ({ column }: HeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="transactions-table-sort-type"
+        >
+          Type
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Type",
+      cell: (i: TxCellContext) => <span className="text-slate-500 text-xs capitalize">{i.getValue() as string}</span>,
+    },
   ];
-  const table = useReactTable({ data: rows, columns, getCoreRowModel: getCoreRowModel() });
-  console.log(`Debug flow: TransactionsTableWidget rendered`, { rows: rows.length });
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    ...(features.sorting && {
+      getSortedRowModel: getSortedRowModel(),
+      state: { sorting: tableState.sorting },
+      onSortingChange: (updater: ((old: typeof tableState.sorting) => typeof tableState.sorting) | typeof tableState.sorting) => {
+        const newSorting = typeof updater === "function" ? updater(tableState.sorting) : updater;
+        tableState.setSorting(newSorting);
+      },
+    }),
+    ...(features.filtering && {
+      getFilteredRowModel: getFilteredRowModel(),
+      state: { columnFilters: Object.entries(tableState.filtering).map(([id, value]) => ({ id, value })) },
+      onColumnFiltersChange: (updater: ((old: ColumnFiltersState) => ColumnFiltersState) | ColumnFiltersState) => {
+        const newFilters = typeof updater === "function" ? updater([]) : updater;
+        tableState.clearFiltering();
+        newFilters.forEach((f: { id: string; value: unknown }) => {
+          tableState.setFiltering(f.id, f.value as string);
+        });
+      },
+    }),
+    ...(features.pagination && {
+      getPaginationRowModel: getPaginationRowModel(),
+      state: { pagination: tableState.pagination },
+      onPaginationChange: (updater: ((old: { pageIndex: number; pageSize: number }) => { pageIndex: number; pageSize: number }) | { pageIndex: number; pageSize: number }) => {
+        const newState = typeof updater === "function" ? updater(tableState.pagination) : updater;
+        tableState.setPageIndex(newState.pageIndex);
+      },
+    }),
+    ...(features.rowSelection && {
+      state: { rowSelection: tableState.rowSelection },
+      onRowSelectionChange: (updater: ((old: Record<string, boolean>) => Record<string, boolean>) | Record<string, boolean>) => {
+        const newSelection = typeof updater === "function" ? updater(tableState.rowSelection) : updater;
+        tableState.setRowSelection(newSelection);
+      },
+    }),
+  });
+
+  console.log(`[DEBUG] TransactionsTableWidget rendered`, { rows: rows.length, features });
+
   return (
-    <div data-test-id="transactions-table-container">
-      <p className="text-xs font-semibold text-slate-700 mb-2" data-test-id="transactions-table-title">{title}</p>
-      <table className="w-full text-xs" data-test-id="transactions-table-table">
-        <thead data-test-id="transactions-table-thead">
-          {table.getHeaderGroups().map((hg) => (
-            <tr key={hg.id} data-test-id="transactions-table-thead-row">
-              {hg.headers.map((h) => (
-                <th key={h.id} className="text-left py-1 px-1 font-semibold text-slate-500" data-test-id={`transactions-table-th-${h.id}`}>
-                  {flexRender(h.column.columnDef.header, h.getContext())}
-                </th>
+    <div data-test-id="transactions-table-container" className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-slate-700" data-test-id="transactions-table-title">
+          {title}
+        </p>
+        <div className="flex items-center gap-2">
+          {features.filtering && (
+            <Input
+              placeholder="Filter..."
+              value={tableState.filtering["desc"] ?? ""}
+              onChange={(e) => tableState.setFiltering("desc", e.target.value)}
+              className="h-7 text-xs w-40"
+              data-test-id="transactions-table-filter-input"
+            />
+          )}
+          {features.columnVisibility && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => {
+                const allVisible = Object.values(table.getState().columnVisibility).every((v) => v !== false);
+                table.toggleAllColumnsVisible(!allVisible);
+              }}
+              data-test-id="transactions-table-toggle-all-columns"
+            >
+              <Eye size={12} className="mr-1" />
+              Columns
+            </Button>
+          )}
+          {features.rowSelection && Object.keys(tableState.rowSelection).length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => tableState.clearRowSelection()}
+              data-test-id="transactions-table-clear-selection"
+            >
+              <Trash2 size={12} className="mr-1" />
+              Clear
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 overflow-hidden">
+        <table className="w-full text-xs border-collapse" data-test-id="transactions-table-table">
+          <thead data-test-id="transactions-table-thead">
+            {table.getHeaderGroups().map((hg) => (
+              <tr key={hg.id} className="bg-slate-50 border-b-2 border-slate-200" data-test-id="transactions-table-thead-row">
+                {hg.headers.map((h) => (
+                  <th
+                    key={h.id}
+                    className="text-left py-2.5 px-3 font-semibold text-slate-600 uppercase tracking-wide"
+                    data-test-id={`transactions-table-th-${h.id}`}
+                    style={{ width: h.getSize() !== 150 ? `${h.getSize()}px` : undefined }}
+                  >
+                    {flexRender(h.column.columnDef.header, h.getContext())}
+                  </th>
+                ))}
+              </tr>
+            ))}
+          </thead>
+          <tbody data-test-id="transactions-table-tbody">
+            {table.getRowModel().rows.map((row) => (
+              <tr
+                key={row.id}
+                className="border-b border-slate-100 hover:bg-slate-50 transition-colors"
+                data-test-id={`transactions-table-row-${row.id}`}
+              >
+                {row.getVisibleCells().map((cell) => (
+                  <td key={cell.id} className="py-2.5 px-3" data-test-id={`transactions-table-cell-${cell.id}`}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {features.pagination && (
+        <div className="flex items-center justify-between gap-2 py-2" data-test-id="transactions-table-pagination">
+          <span className="text-xs text-slate-600" data-test-id="transactions-table-page-info">
+            Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => tableState.setPageIndex(table.getState().pagination.pageIndex - 1)}
+              disabled={!table.getCanPreviousPage()}
+              data-test-id="transactions-table-prev-page"
+            >
+              <ChevronLeft size={12} />
+            </Button>
+            <select
+              value={table.getState().pagination.pageSize}
+              onChange={(e) => tableState.setPageSize(Number(e.target.value))}
+              className="h-7 px-2 text-xs border border-slate-200 rounded"
+              data-test-id="transactions-table-page-size"
+            >
+              {[10, 20, 30, 40, 50].map((size) => (
+                <option key={size} value={size}>
+                  {size} rows
+                </option>
               ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody data-test-id="transactions-table-tbody">
-          {table.getRowModel().rows.map((row) => (
-            <tr key={row.id} data-test-id={`transactions-table-row-${row.id}`}>
-              {row.getVisibleCells().map((cell) => (
-                <td key={cell.id} className="py-1 px-1" data-test-id={`transactions-table-cell-${cell.id}`}>
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </td>
+            </select>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => tableState.setPageIndex(table.getState().pagination.pageIndex + 1)}
+              disabled={!table.getCanNextPage()}
+              data-test-id="transactions-table-next-page"
+            >
+              <ChevronRightIcon size={12} />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {features.rowSelection && Object.keys(tableState.rowSelection).length > 0 && (
+        <div className="text-xs text-slate-600 bg-blue-50 p-2 rounded" data-test-id="transactions-table-selection-info">
+          {Object.keys(tableState.rowSelection).length} row(s) selected
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Enterprise LeadsTable Widget ────────────────────────────── */
+
+type LeadRow = Lead;
+type LeadHeaderContext = { column: { id: string; getIsSorted: () => false | "asc" | "desc"; toggleSorting: (desc?: boolean) => void } };
+type LeadCellContext = { getValue: () => unknown; row: { id: string; original: LeadRow; getIsSelected: () => boolean; toggleSelected: (value?: boolean) => void } };
+
+function LeadsTableWidget({ data, preview = false }: { data: Record<string, unknown>; preview?: boolean }) {
+  "use no memo";
+  const config = data as LeadsTableConfig;
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const allRows: LeadRow[] = (config.rows as LeadRow[]) ?? [
+    {
+      id: "L001",
+      name: "Sarah Johnson",
+      email: "sarah.johnson@acme.com",
+      phone: "(555) 123-4567",
+      company: "Acme Corp",
+      avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah",
+      status: "Hot" as LeadStatus,
+      score: 95,
+      tags: ["Enterprise", "Urgent"],
+      lastContact: "2 hours ago",
+      conversationHistory: ["Initial pitch sent", "Call scheduled"],
+      notes: "Very interested in Q1 implementation",
+    },
+    {
+      id: "L002",
+      name: "Marcus Chen",
+      email: "m.chen@techstartup.io",
+      phone: "(555) 234-5678",
+      company: "Tech Startup Inc",
+      avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Marcus",
+      status: "Warm" as LeadStatus,
+      score: 78,
+      tags: ["Mid-Market", "Tech"],
+      lastContact: "3 days ago",
+      conversationHistory: ["Demo completed", "Awaiting approval"],
+      notes: "Budget approval pending",
+    },
+    {
+      id: "L003",
+      name: "Emma Rodriguez",
+      email: "emma.r@fintech.co",
+      phone: "(555) 345-6789",
+      company: "FinTech Solutions",
+      avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Emma",
+      status: "Qualified" as LeadStatus,
+      score: 68,
+      tags: ["Finance", "Compliance"],
+      lastContact: "1 week ago",
+      conversationHistory: ["Initial contact", "Needs assessment"],
+      notes: "Interested but has compliance concerns",
+    },
+    {
+      id: "L004",
+      name: "James Wilson",
+      email: "j.wilson@retailchain.com",
+      phone: "(555) 456-7890",
+      company: "Retail Chain Co",
+      avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=James",
+      status: "Cold" as LeadStatus,
+      score: 35,
+      tags: ["Retail", "SMB"],
+      lastContact: "2 weeks ago",
+      conversationHistory: ["First outreach", "No response"],
+      notes: "May follow up in Q2",
+    },
+  ];
+
+  // In preview mode, show only 2 rows and disable all interactive features
+  const rows = preview ? allRows.slice(0, 2) : allRows;
+
+  const features = preview
+    ? {
+        sorting: false,
+        filtering: false,
+        pagination: false,
+        columnVisibility: false,
+        columnResizing: false,
+        rowSelection: false,
+        expandableRows: false,
+      }
+    : (config.features ?? {
+        sorting: true,
+        filtering: true,
+        pagination: true,
+        columnVisibility: true,
+        columnResizing: true,
+        rowSelection: true,
+        expandableRows: true,
+      });
+
+  const tableState = useTableState();
+
+  const statusColors: Record<LeadStatus, string> = {
+    Hot: "text-red-700 bg-red-50 border-l-2 border-red-500",
+    Warm: "text-orange-700 bg-orange-50 border-l-2 border-orange-500",
+    Qualified: "text-blue-700 bg-blue-50 border-l-2 border-blue-500",
+    Cold: "text-slate-700 bg-slate-50 border-l-2 border-slate-300",
+    Lost: "text-slate-600 bg-slate-100 border-l-2 border-slate-400",
+    Converted: "text-emerald-700 bg-emerald-50 border-l-2 border-emerald-500",
+  };
+
+  const getInitials = (name: string): string => {
+    return name
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
+  const renderLeadScore = (score: number): React.ReactElement => {
+    const filledStars = Math.floor(score / 20);
+    return (
+      <div className="flex items-center gap-1">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <Star key={i} size={14} className={i <= filledStars ? "text-yellow-400 fill-yellow-400" : "text-slate-300"} />
+        ))}
+        <span className="text-xs font-semibold text-slate-700 ml-1">{score}</span>
+      </div>
+    );
+  };
+
+  const handleBulkAction = (action: string) => {
+    console.log(`[DEBUG] LeadsTableWidget bulk action: ${action}`, {
+      selectedRows: Object.keys(tableState.rowSelection),
+      count: Object.keys(tableState.rowSelection).length,
+    });
+  };
+
+  const columns: ColumnDef<LeadRow>[] = [
+    ...(features.rowSelection
+      ? [
+          {
+            id: "select",
+            header: ({ table }: { table: Table<LeadRow> }) => (
+              <input
+                type="checkbox"
+                checked={table.getIsAllRowsSelected()}
+                onChange={(e) => {
+                  table.toggleAllRowsSelected(e.target.checked);
+                  if (e.target.checked) {
+                    tableState.selectAllRows(table.getRowModel().rows.map((r) => r.id));
+                  } else {
+                    tableState.clearRowSelection();
+                  }
+                }}
+                className="cursor-pointer"
+                data-test-id="leads-table-select-all"
+              />
+            ),
+            cell: ({ row }: { row: { id: string; getIsSelected: () => boolean; toggleSelected: (value?: boolean) => void } }) => (
+              <input
+                type="checkbox"
+                checked={row.getIsSelected()}
+                onChange={(e) => {
+                  row.toggleSelected(e.target.checked);
+                  tableState.toggleRowSelection(row.id);
+                }}
+                className="cursor-pointer"
+                data-test-id={`leads-table-row-select-${row.id}`}
+              />
+            ),
+            size: 40,
+          },
+        ]
+      : []),
+    ...(features.expandableRows
+      ? [
+          {
+            id: "expand",
+            cell: ({ row }: { row: { id: string } }) => (
+              <button
+                onClick={() => {
+                  const newSet = new Set(expandedRows);
+                  if (newSet.has(row.id)) {
+                    newSet.delete(row.id);
+                  } else {
+                    newSet.add(row.id);
+                  }
+                  setExpandedRows(newSet);
+                }}
+                className="p-1 hover:bg-slate-100 rounded transition-colors"
+                data-test-id={`leads-table-expand-${row.id}`}
+              >
+                <ChevronRight size={14} className={expandedRows.has(row.id) ? "rotate-90 transition-transform" : "transition-transform"} />
+              </button>
+            ),
+            size: 40,
+          },
+        ]
+      : []),
+    {
+      accessorKey: "name",
+      header: features.sorting ? ({ column }: LeadHeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="leads-table-sort-name"
+        >
+          Name
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Name",
+      cell: ({ row }: LeadCellContext) => {
+        const lead = row.original as LeadRow;
+        return (
+          <div className="flex items-center gap-2.5">
+            <Avatar className="h-8 w-8 flex-shrink-0">
+              <AvatarImage src={lead.avatar} alt={lead.name} />
+              <AvatarFallback className="text-xs font-semibold">{getInitials(lead.name)}</AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col gap-0.5">
+              <span className="font-medium text-slate-900 text-xs">{lead.name}</span>
+              <span className="text-xs text-slate-500">{lead.company}</span>
+            </div>
+          </div>
+        );
+      },
+      size: 200,
+    },
+    {
+      accessorKey: "email",
+      header: features.sorting ? ({ column }: LeadHeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="leads-table-sort-email"
+        >
+          Email
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Email",
+      cell: ({ row }: LeadCellContext) => {
+        const lead = row.original as LeadRow;
+        return <span className="text-xs text-slate-600 truncate">{lead.email}</span>;
+      },
+      size: 160,
+    },
+    {
+      accessorKey: "phone",
+      header: features.sorting ? ({ column }: LeadHeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="leads-table-sort-phone"
+        >
+          Phone
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Phone",
+      cell: ({ row }: LeadCellContext) => {
+        const lead = row.original as LeadRow;
+        return <span className="text-xs text-slate-600">{lead.phone ?? "-"}</span>;
+      },
+      size: 130,
+    },
+    {
+      accessorKey: "status",
+      header: features.sorting ? ({ column }: LeadHeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="leads-table-sort-status"
+        >
+          Status
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Status",
+      cell: ({ row }: LeadCellContext) => {
+        const lead = row.original as LeadRow;
+        const statusColor = statusColors[lead.status] || statusColors.Cold;
+        return (
+          <Badge variant="outline" className={`text-xs font-medium px-2 py-1 ${statusColor}`}>
+            {lead.status}
+          </Badge>
+        );
+      },
+      size: 100,
+    },
+    {
+      accessorKey: "score",
+      header: features.sorting ? ({ column }: LeadHeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="leads-table-sort-score"
+        >
+          Score
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Score",
+      cell: ({ row }: LeadCellContext) => {
+        const lead = row.original as LeadRow;
+        return renderLeadScore(lead.score);
+      },
+      size: 120,
+    },
+    {
+      accessorKey: "lastContact",
+      header: features.sorting ? ({ column }: LeadHeaderContext) => (
+        <button
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+          className="flex items-center gap-1 cursor-pointer hover:bg-slate-100 px-1 py-1 rounded"
+          data-test-id="leads-table-sort-lastcontact"
+        >
+          Last Contact
+          {column.getIsSorted() === "asc" && <ArrowUp size={12} />}
+          {column.getIsSorted() === "desc" && <ArrowDown size={12} />}
+          {!column.getIsSorted() && <ArrowUpDown size={12} className="opacity-40" />}
+        </button>
+      ) : "Last Contact",
+      cell: ({ row }: LeadCellContext) => {
+        const lead = row.original as LeadRow;
+        return <span className="text-xs text-slate-500">{lead.lastContact ?? "-"}</span>;
+      },
+      size: 110,
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }: LeadCellContext) => (
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" data-test-id={`leads-table-action-contact-${row.id}`}>
+            Contact
+          </Button>
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" data-test-id={`leads-table-action-email-${row.id}`}>
+            Email
+          </Button>
+        </div>
+      ),
+      size: 140,
+    },
+  ];
+
+  const title = config.title ?? "Sales Leads";
+
+  const table = useReactTable({
+    data: rows,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    ...(features.sorting && {
+      getSortedRowModel: getSortedRowModel(),
+      state: { sorting: tableState.sorting },
+      onSortingChange: (updater: ((old: typeof tableState.sorting) => typeof tableState.sorting) | typeof tableState.sorting) => {
+        const newSorting = typeof updater === "function" ? updater(tableState.sorting) : updater;
+        tableState.setSorting(newSorting);
+      },
+    }),
+    ...(features.filtering && {
+      getFilteredRowModel: getFilteredRowModel(),
+      state: { columnFilters: Object.entries(tableState.filtering).map(([id, value]) => ({ id, value })) },
+      onColumnFiltersChange: (updater: ((old: ColumnFiltersState) => ColumnFiltersState) | ColumnFiltersState) => {
+        const newFilters = typeof updater === "function" ? updater([]) : updater;
+        tableState.clearFiltering();
+        newFilters.forEach((f: { id: string; value: unknown }) => {
+          tableState.setFiltering(f.id, f.value as string);
+        });
+      },
+    }),
+    ...(features.pagination && {
+      getPaginationRowModel: getPaginationRowModel(),
+      state: { pagination: tableState.pagination },
+      onPaginationChange: (updater: ((old: { pageIndex: number; pageSize: number }) => { pageIndex: number; pageSize: number }) | { pageIndex: number; pageSize: number }) => {
+        const newState = typeof updater === "function" ? updater(tableState.pagination) : updater;
+        tableState.setPageIndex(newState.pageIndex);
+      },
+    }),
+    ...(features.rowSelection && {
+      state: { rowSelection: tableState.rowSelection },
+      onRowSelectionChange: (updater: ((old: Record<string, boolean>) => Record<string, boolean>) | Record<string, boolean>) => {
+        const newSelection = typeof updater === "function" ? updater(tableState.rowSelection) : updater;
+        tableState.setRowSelection(newSelection);
+      },
+    }),
+  });
+
+  console.log(`[DEBUG] LeadsTableWidget rendered`, { rows: rows.length, features, selectedCount: Object.keys(tableState.rowSelection).length });
+
+  return (
+    <div data-test-id="leads-table-container" className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-slate-700" data-test-id="leads-table-title">
+          {title}
+        </p>
+        <div className="flex items-center gap-2">
+          {features.filtering && (
+            <Input
+              placeholder="Search leads..."
+              value={tableState.filtering["name"] ?? ""}
+              onChange={(e) => tableState.setFiltering("name", e.target.value)}
+              className="h-7 text-xs w-40"
+              data-test-id="leads-table-filter-input"
+            />
+          )}
+          {features.columnVisibility && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => {
+                const allVisible = Object.values(table.getState().columnVisibility).every((v) => v !== false);
+                table.toggleAllColumnsVisible(!allVisible);
+              }}
+              data-test-id="leads-table-toggle-columns"
+            >
+              <Eye size={12} className="mr-1" />
+              Columns
+            </Button>
+          )}
+          {features.rowSelection && Object.keys(tableState.rowSelection).length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => tableState.clearRowSelection()}
+              data-test-id="leads-table-clear-selection"
+            >
+              <Trash2 size={12} className="mr-1" />
+              Clear
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 overflow-hidden">
+        <table className="w-full text-xs border-collapse" data-test-id="leads-table-table">
+          <thead data-test-id="leads-table-thead">
+            {table.getHeaderGroups().map((hg) => (
+              <tr key={hg.id} className="bg-slate-50 border-b-2 border-slate-200" data-test-id="leads-table-thead-row">
+                {hg.headers.map((h) => (
+                  <th
+                    key={h.id}
+                    className="text-left py-2.5 px-3 font-semibold text-slate-600 uppercase tracking-wide"
+                    data-test-id={`leads-table-th-${h.id}`}
+                    style={{ width: h.getSize() !== 150 ? `${h.getSize()}px` : undefined }}
+                  >
+                    {flexRender(h.column.columnDef.header, h.getContext())}
+                  </th>
+                ))}
+              </tr>
+            ))}
+          </thead>
+          <tbody data-test-id="leads-table-tbody">
+            {table.getRowModel().rows.map((row) => {
+              const isExpanded = expandedRows.has(row.id);
+              const lead = row.original as LeadRow;
+              return (
+                <React.Fragment key={row.id}>
+                  <tr className="border-b border-slate-100 hover:bg-slate-50 transition-colors" data-test-id={`leads-table-row-${row.id}`}>
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="py-2.5 px-3" data-test-id={`leads-table-cell-${cell.id}`}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                  {isExpanded && features.expandableRows && (
+                    <tr className="border-b-2 border-slate-100 bg-slate-50" data-test-id={`leads-table-expand-detail-${row.id}`}>
+                      <td colSpan={columns.length} className="px-4 py-3">
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-xs font-semibold text-slate-700 mb-1">Contact Info</p>
+                              <div className="space-y-1 text-xs">
+                                <p className="text-slate-600">Email: {lead.email}</p>
+                                <p className="text-slate-600">Phone: {lead.phone ?? "-"}</p>
+                                <p className="text-slate-600">Company: {lead.company ?? "-"}</p>
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold text-slate-700 mb-1">Status & Score</p>
+                              <div className="space-y-1">
+                                <p className="text-xs text-slate-600">Status: {lead.status}</p>
+                                <p className="text-xs text-slate-600">Lead Score: {lead.score}/100</p>
+                                {lead.tags && lead.tags.length > 0 && (
+                                  <div className="flex gap-1 flex-wrap mt-1">
+                                    {lead.tags.map((tag) => (
+                                      <Badge key={tag} variant="secondary" className="text-xs py-0.5">
+                                        {tag}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          {lead.notes && (
+                            <div>
+                              <p className="text-xs font-semibold text-slate-700 mb-1">Notes</p>
+                              <p className="text-xs text-slate-600">{lead.notes}</p>
+                            </div>
+                          )}
+                          {lead.conversationHistory && lead.conversationHistory.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold text-slate-700 mb-1">Conversation History</p>
+                              <ul className="list-disc list-inside space-y-0.5">
+                                {lead.conversationHistory.map((entry, idx) => (
+                                  <li key={idx} className="text-xs text-slate-600">
+                                    {entry}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {features.pagination && (
+        <div className="flex items-center justify-between gap-2 py-2" data-test-id="leads-table-pagination">
+          <span className="text-xs text-slate-600" data-test-id="leads-table-page-info">
+            Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => tableState.setPageIndex(table.getState().pagination.pageIndex - 1)}
+              disabled={!table.getCanPreviousPage()}
+              data-test-id="leads-table-prev-page"
+            >
+              <ChevronLeft size={12} />
+            </Button>
+            <select
+              value={table.getState().pagination.pageSize}
+              onChange={(e) => tableState.setPageSize(Number(e.target.value))}
+              className="h-7 px-2 text-xs border border-slate-200 rounded"
+              data-test-id="leads-table-page-size"
+            >
+              {[10, 20, 30, 40, 50].map((size) => (
+                <option key={size} value={size}>
+                  {size} rows
+                </option>
               ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+            </select>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => tableState.setPageIndex(table.getState().pagination.pageIndex + 1)}
+              disabled={!table.getCanNextPage()}
+              data-test-id="leads-table-next-page"
+            >
+              <ChevronRightIcon size={12} />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {features.rowSelection && Object.keys(tableState.rowSelection).length > 0 && (
+        <div className="text-xs text-slate-600 bg-blue-50 p-2 rounded flex items-center justify-between" data-test-id="leads-table-selection-info">
+          <span>{Object.keys(tableState.rowSelection).length} lead(s) selected</span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-xs"
+              onClick={() => handleBulkAction("send-email")}
+              data-test-id="leads-table-bulk-email"
+            >
+              Send Email
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-xs"
+              onClick={() => handleBulkAction("change-status")}
+              data-test-id="leads-table-bulk-status"
+            >
+              Change Status
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-xs"
+              onClick={() => handleBulkAction("add-tags")}
+              data-test-id="leads-table-bulk-tags"
+            >
+              Add Tags
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -748,11 +2199,25 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
   },
 
   // ── TABLES ──────────────────────────────────────────────────────
-  "orders-table": (data) => <OrdersTableWidget data={data} />,
+  "orders-table": (data) => {
+    const preview = (data._preview as boolean) ?? false;
+    return <OrdersTableWidget data={data} preview={preview} />;
+  },
 
-  "customers-table": (data) => <CustomersTableWidget data={data} />,
+  "customers-table": (data) => {
+    const preview = (data._preview as boolean) ?? false;
+    return <CustomersTableWidget data={data} preview={preview} />;
+  },
 
-  "transactions-table": (data) => <TransactionsTableWidget data={data} />,
+  "transactions-table": (data) => {
+    const preview = (data._preview as boolean) ?? false;
+    return <TransactionsTableWidget data={data} preview={preview} />;
+  },
+
+  "leads-table": (data) => {
+    const preview = (data._preview as boolean) ?? false;
+    return <LeadsTableWidget data={data} preview={preview} />;
+  },
 
   "inventory-table": (data) => {
     const rows = (data.rows as {product:string;sku:string;stock:number;status:string}[]) ?? [{product:"Widget Pro",sku:"WGT-001",stock:142,status:"In Stock"},{product:"Dashboard Kit",sku:"DSH-004",stock:8,status:"Low Stock"},{product:"Analytics Pack",sku:"ANL-009",stock:0,status:"Out of Stock"},{product:"Chart Bundle",sku:"CHT-012",stock:56,status:"In Stock"}];
@@ -939,17 +2404,23 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   "button-group": (data) => {
     const buttons = (data.buttons as {label:string;variant:string}[]) ?? [{label:"Edit",variant:"outline"},{label:"Share",variant:"outline"},{label:"Delete",variant:"destructive"}];
+    const primary = buttons[0] ?? { label: "Edit", variant: "outline" };
+    const secondary = buttons.slice(1).map((btn) => btn.label);
+    console.log(`Debug flow: button-group preview fired with`, { buttonCount: buttons.length, primary });
     return (
-      <div className="flex flex-col h-full gap-3" data-test-id="button-group-container">
+      <div className="flex flex-col h-full justify-center gap-3" data-test-id="button-group-container">
         <p className="text-xs text-slate-500" data-test-id="button-group-label">Action Group</p>
-        <div className="flex gap-1 flex-wrap" data-test-id="button-group-row">
-          {buttons.map((btn,i)=>(
-            <button key={i} className={`px-3 py-1.5 text-xs font-medium rounded-lg border ${btn.variant==="destructive"?"bg-red-50 border-red-200 text-red-700":"bg-white border-slate-200 text-slate-700 hover:bg-slate-50"}`} data-test-id={`button-group-btn-${i}`}>{btn.label}</button>
-          ))}
-        </div>
-        <div className="flex rounded-lg border border-slate-200 overflow-hidden w-fit" data-test-id="button-group-joined">
-          <button className="px-3 py-1.5 text-xs font-medium text-slate-700 border-r border-slate-200 hover:bg-slate-50" data-test-id="button-group-joined-prev">← Prev</button>
-          <button className="px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50" data-test-id="button-group-joined-next">Next →</button>
+        <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-3" data-test-id="button-group-row">
+          <div className={`inline-flex items-center rounded-xl border px-4 py-2 text-sm font-semibold ${primary.variant === "destructive" ? "border-red-200 bg-red-50 text-red-700" : "border-slate-900 bg-slate-900 text-white"}`} data-test-id="button-group-primary">
+            {primary.label}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5" data-test-id="button-group-secondary">
+            {secondary.map((label, i) => (
+              <span key={label} className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600" data-test-id={`button-group-secondary-${i}`}>
+                {label}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -958,20 +2429,22 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
   "icon-button-bar": (data) => {
     const buttons = (data.buttons as {tooltip:string}[]) ?? [{tooltip:"Bold"},{tooltip:"Italic"},{tooltip:"Underline"},{tooltip:"Align Left"},{tooltip:"Align Center"}];
     const label: Record<string,string> = {"Bold":"B","Italic":"I","Underline":"U","Align Left":"≡","Align Center":"☰"};
+    const activeButton = buttons[0]?.tooltip ?? "Bold";
+    console.log(`Debug flow: icon-button-bar preview fired with`, { buttonCount: buttons.length, activeButton });
     return (
-      <div className="flex flex-col h-full gap-2" data-test-id="icon-button-bar-container">
+      <div className="flex flex-col h-full justify-center gap-3" data-test-id="icon-button-bar-container">
         <p className="text-xs text-slate-500" data-test-id="icon-button-bar-label">Toolbar</p>
-        <div className="flex items-center gap-0.5 p-1 bg-slate-50 rounded-lg border border-slate-200 w-fit" data-test-id="icon-button-bar-toolbar">
-          {buttons.map((btn,i)=>(
-            <button key={i} title={btn.tooltip} className={`w-7 h-7 flex items-center justify-center rounded text-xs font-bold text-slate-600 hover:bg-slate-200 ${btn.tooltip==="Italic"?"italic":""} ${btn.tooltip==="Underline"?"underline":""}`} data-test-id={`icon-button-bar-btn-${i}`}>{label[btn.tooltip]??btn.tooltip[0]}</button>
-          ))}
-          <div className="w-px h-4 bg-slate-300 mx-1" data-test-id="icon-button-bar-divider" />
-          <button className="w-7 h-7 flex items-center justify-center rounded text-slate-400 hover:bg-slate-200 text-xs" data-test-id="icon-button-bar-more-btn">···</button>
-        </div>
-        <div className="flex gap-2 items-center" data-test-id="icon-button-bar-standalone">
-          <button className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" data-test-id="icon-button-bar-plus-btn"><Plus className="w-4 h-4" /></button>
-          <button className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" data-test-id="icon-button-bar-search-btn"><Search className="w-4 h-4" /></button>
-          <button className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50" data-test-id="icon-button-bar-star-btn"><Star className="w-4 h-4" /></button>
+        <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-3" data-test-id="icon-button-bar-toolbar">
+          <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-sm font-bold text-slate-700 shadow-sm" data-test-id="icon-button-bar-active">
+            {label[activeButton] ?? activeButton[0]}
+          </div>
+          <div className="mt-2 flex items-center gap-1" data-test-id="icon-button-bar-standalone">
+            {buttons.slice(1, 4).map((btn, i) => (
+              <span key={btn.tooltip} className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-500" data-test-id={`icon-button-bar-chip-${i}`}>
+                {btn.tooltip}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -979,18 +2452,242 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   "split-button": (data) => {
     const label = (data.label as string) ?? "Export";
+    console.log(`Debug flow: split-button preview fired with`, { label });
     return (
-      <div className="flex flex-col h-full gap-3" data-test-id="split-button-container">
+      <div className="flex flex-col h-full justify-center gap-3" data-test-id="split-button-container">
         <p className="text-xs text-slate-500" data-test-id="split-button-label">Split Button</p>
-        <div className="flex w-fit" data-test-id="split-button-wrapper">
-          <button className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-l-lg border-r border-blue-700" data-test-id="split-button-main">{label}</button>
-          <button className="px-2 py-2 bg-blue-600 text-white rounded-r-lg hover:bg-blue-700" data-test-id="split-button-arrow"><ChevronDown className="w-4 h-4" data-test-id="split-button-arrow-icon" /></button>
+        <div className="inline-flex w-fit items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm" data-test-id="split-button-wrapper">
+          <span data-test-id="split-button-main">{label}</span>
+          <span className="rounded-md bg-blue-700/70 p-1" data-test-id="split-button-arrow"><ChevronDown className="w-4 h-4" data-test-id="split-button-arrow-icon" /></span>
         </div>
       </div>
     );
   },
 
   "toggle-button-group": (data) => <ToggleWidget data={data} />,
+
+  "button-left-icon": (data) => {
+    const label = (data.label as string) ?? "Create Report";
+    const description = (data.description as string) ?? "Button with left icon";
+    console.log(`Debug flow: button-left-icon preview fired with`, { label, description });
+    return (
+      <div className="flex flex-col h-full gap-3" data-test-id="button-left-icon-container">
+        <p className="text-xs text-slate-500" data-test-id="button-left-icon-desc">{description}</p>
+        <button className="w-fit px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg inline-flex items-center gap-2 hover:bg-indigo-700" data-test-id="button-left-icon-btn">
+          <Plus className="w-4 h-4" data-test-id="button-left-icon-symbol" />
+          <span data-test-id="button-left-icon-label">{label}</span>
+        </button>
+      </div>
+    );
+  },
+
+  "button-right-icon": (data) => {
+    const label = (data.label as string) ?? "View Details";
+    const description = (data.description as string) ?? "Button with right icon";
+    console.log(`Debug flow: button-right-icon preview fired with`, { label, description });
+    return (
+      <div className="flex flex-col h-full gap-3" data-test-id="button-right-icon-container">
+        <p className="text-xs text-slate-500" data-test-id="button-right-icon-desc">{description}</p>
+        <button className="w-fit px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg inline-flex items-center gap-2 hover:bg-emerald-700" data-test-id="button-right-icon-btn">
+          <span data-test-id="button-right-icon-label">{label}</span>
+          <ArrowUpRight className="w-4 h-4" data-test-id="button-right-icon-symbol" />
+        </button>
+      </div>
+    );
+  },
+
+  "button-primary": (data) => {
+    const label = (data.label as string) ?? "Create Report";
+    const description = (data.description as string) ?? "Primary action button";
+    console.log(`Debug flow: button-primary preview fired with`, { label, description });
+    return (
+      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="button-primary-container">
+        <p className="text-xs text-slate-500" data-test-id="button-primary-desc">{description}</p>
+        <button className="w-fit rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm" data-test-id="button-primary-btn">
+          {label}
+        </button>
+      </div>
+    );
+  },
+
+  "button-secondary": (data) => {
+    const label = (data.label as string) ?? "Save Draft";
+    const description = (data.description as string) ?? "Secondary action button";
+    console.log(`Debug flow: button-secondary preview fired with`, { label, description });
+    return (
+      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="button-secondary-container">
+        <p className="text-xs text-slate-500" data-test-id="button-secondary-desc">{description}</p>
+        <button className="w-fit rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm" data-test-id="button-secondary-btn">
+          {label}
+        </button>
+      </div>
+    );
+  },
+
+  "button-outline": (data) => {
+    const label = (data.label as string) ?? "View Details";
+    const description = (data.description as string) ?? "Outline action button";
+    console.log(`Debug flow: button-outline preview fired with`, { label, description });
+    return (
+      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="button-outline-container">
+        <p className="text-xs text-slate-500" data-test-id="button-outline-desc">{description}</p>
+        <button className="w-fit rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm" data-test-id="button-outline-btn">
+          {label}
+        </button>
+      </div>
+    );
+  },
+
+  "button-ghost": (data) => {
+    const label = (data.label as string) ?? "Skip for now";
+    const description = (data.description as string) ?? "Ghost action button";
+    console.log(`Debug flow: button-ghost preview fired with`, { label, description });
+    return (
+      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="button-ghost-container">
+        <p className="text-xs text-slate-500" data-test-id="button-ghost-desc">{description}</p>
+        <button className="w-fit rounded-xl bg-transparent px-4 py-2 text-sm font-semibold text-slate-600" data-test-id="button-ghost-btn">
+          {label}
+        </button>
+      </div>
+    );
+  },
+
+  "button-link": (data) => {
+    const label = (data.label as string) ?? "Open analytics";
+    const description = (data.description as string) ?? "Link action button";
+    console.log(`Debug flow: button-link preview fired with`, { label, description });
+    return (
+      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="button-link-container">
+        <p className="text-xs text-slate-500" data-test-id="button-link-desc">{description}</p>
+        <button className="inline-flex w-fit items-center gap-2 px-1 py-2 text-sm font-semibold text-blue-700" data-test-id="button-link-btn">
+          <span>{label}</span>
+          <ArrowUpRight className="w-4 h-4" data-test-id="button-link-icon" />
+        </button>
+      </div>
+    );
+  },
+
+  "button-destructive": (data) => {
+    const label = (data.label as string) ?? "Delete item";
+    const description = (data.description as string) ?? "Destructive action button";
+    console.log(`Debug flow: button-destructive preview fired with`, { label, description });
+    return (
+      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="button-destructive-container">
+        <p className="text-xs text-slate-500" data-test-id="button-destructive-desc">{description}</p>
+        <button className="w-fit rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm" data-test-id="button-destructive-btn">
+          {label}
+        </button>
+      </div>
+    );
+  },
+
+  "upload-button-solid": (data) => {
+    const label = (data.label as string) ?? "Upload file";
+    const description = (data.description as string) ?? "Primary upload button";
+    console.log(`Debug flow: upload-button-solid preview fired with`, { label, description });
+    return (
+      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="upload-button-solid-container">
+        <p className="text-xs text-slate-500" data-test-id="upload-button-solid-desc">{description}</p>
+        <button className="inline-flex w-fit items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm" data-test-id="upload-button-solid-btn">
+          <Upload className="w-4 h-4" data-test-id="upload-button-solid-icon" />
+          <span>{label}</span>
+        </button>
+      </div>
+    );
+  },
+
+  "upload-button-outline": (data) => {
+    const label = (data.label as string) ?? "Upload assets";
+    const description = (data.description as string) ?? "Outline upload button";
+    console.log(`Debug flow: upload-button-outline preview fired with`, { label, description });
+    return (
+      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="upload-button-outline-container">
+        <p className="text-xs text-slate-500" data-test-id="upload-button-outline-desc">{description}</p>
+        <button className="inline-flex w-fit items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700" data-test-id="upload-button-outline-btn">
+          <Upload className="w-4 h-4" data-test-id="upload-button-outline-icon" />
+          <span>{label}</span>
+        </button>
+      </div>
+    );
+  },
+
+  "upload-button-dashed": (data) => {
+    const label = (data.label as string) ?? "Drag and upload";
+    const description = (data.description as string) ?? "Dashed upload button";
+    console.log(`Debug flow: upload-button-dashed preview fired with`, { label, description });
+    return (
+      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="upload-button-dashed-container">
+        <p className="text-xs text-slate-500" data-test-id="upload-button-dashed-desc">{description}</p>
+        <button className="inline-flex w-fit items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600" data-test-id="upload-button-dashed-btn">
+          <Upload className="w-4 h-4" data-test-id="upload-button-dashed-icon" />
+          <span>{label}</span>
+        </button>
+      </div>
+    );
+  },
+
+  "upload-buttons": (data) => {
+    const labels = (data.labels as string[]) ?? ["Upload file", "Upload assets", "Drag and upload"];
+    console.log(`Debug flow: upload-buttons preview fired with`, { labelsCount: labels.length, labels });
+    return (
+      <div className="flex flex-col h-full justify-center gap-3" data-test-id="upload-buttons-container">
+        <p className="text-xs text-slate-500" data-test-id="upload-buttons-label">Upload Buttons</p>
+        <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-3" data-test-id="upload-buttons-shell">
+          <div className="w-full rounded-xl bg-blue-600 px-3 py-2 text-center text-xs font-semibold text-white shadow-sm" data-test-id="upload-buttons-solid">
+            <span className="inline-flex items-center gap-2">
+              <Upload className="w-3.5 h-3.5" data-test-id="upload-buttons-solid-icon" />
+              <span data-test-id="upload-buttons-solid-label">{labels[0] ?? "Upload file"}</span>
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5" data-test-id="upload-buttons-variants">
+            <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700" data-test-id="upload-buttons-outline-label">
+              {labels[1] ?? "Upload assets"}
+            </span>
+            <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600" data-test-id="upload-buttons-dashed-label">
+              {labels[2] ?? "Drag and upload"}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  },
+
+  "button-variant-set": (data) => {
+    const labels = (data.labels as Record<string, string>) ?? {
+      default: "Default",
+      secondary: "Secondary",
+      outline: "Outline",
+      ghost: "Ghost",
+      link: "Link",
+      destructive: "Destructive",
+    };
+    const uploadLabels = (data.uploadLabels as string[]) ?? ["Upload file", "Upload assets", "Drag & upload"];
+    const leftLabel = (data.leftLabel as string) ?? "Create Report";
+    const rightLabel = (data.rightLabel as string) ?? "View Details";
+    console.log(`Debug flow: button-variant-set preview fired with`, { labels, uploadLabels, leftLabel, rightLabel });
+    return (
+      <div className="flex flex-col h-full justify-center gap-3" data-test-id="button-variant-set-container">
+        <div className="space-y-0.5" data-test-id="button-variant-set-header">
+          <p className="text-xs font-semibold text-slate-700">Button Variants</p>
+          <p className="text-[11px] text-slate-500">One primary action with supporting styles</p>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-3" data-test-id="button-variant-set-shell">
+          <div className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm" data-test-id="button-variant-set-default">
+            <Plus className="w-4 h-4" />
+            <span>{leftLabel || labels.default}</span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5" data-test-id="button-variant-set-row">
+            {[labels.secondary, labels.outline, labels.ghost, labels.link, labels.destructive, rightLabel, uploadLabels[0]].map((item, index) => (
+              <span key={`${item}-${index}`} className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600" data-test-id={`button-variant-set-chip-${index}`}>
+                {item}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  },
 
   // ── DROPDOWN ────────────────────────────────────────────────────
   "single-select-dropdown": (data) => <SelectWidget data={data} />,

@@ -4,6 +4,44 @@ import { prisma } from "@/lib/prisma";
 import { validateSession, SESSION_COOKIE_NAME } from "@/lib/auth";
 import type { LayoutBlock } from "@/domain/builder/types";
 
+function updateBlockInTree(
+  blocks: LayoutBlock[],
+  blockId: string,
+  updater: (block: LayoutBlock) => LayoutBlock
+): { blocks: LayoutBlock[]; updated: boolean } {
+  console.log(`Debug flow: updateBlockInTree (blocks/data) fired with`, { blockId, blockCount: blocks.length });
+  let updated = false;
+  const nextBlocks = blocks.map((block) => {
+    if (block.id === blockId) {
+      updated = true;
+      return updater(block);
+    }
+
+    let childUpdated = false;
+    const nextSlots = block.slots.map((slot) => {
+      const childBlocks = slot.childBlocks ?? [];
+      if (childBlocks.length === 0) {
+        return slot;
+      }
+      const result = updateBlockInTree(childBlocks, blockId, updater);
+      if (!result.updated) {
+        return slot;
+      }
+      childUpdated = true;
+      return { ...slot, childBlocks: result.blocks };
+    });
+
+    if (!childUpdated) {
+      return block;
+    }
+
+    updated = true;
+    return { ...block, slots: nextSlots };
+  });
+
+  return { blocks: updated ? nextBlocks : blocks, updated };
+}
+
 async function getAuthenticatedUserId(): Promise<string | null> {
   console.log(`Debug flow: getAuthenticatedUserId (blocks/data) fired`);
   const cookieStore = await cookies();
@@ -53,30 +91,34 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "Invalid layout JSON" }, { status: 500 });
       }
 
-      const blockIdx = layout.findIndex((b) => b.id === blockId);
-      if (blockIdx === -1) {
+      const result = updateBlockInTree(layout, blockId, (block) => {
+        const newSlots = [...block.slots];
+        const existingSlot = newSlots[slotIdx];
+
+        if (existingSlot?.widget) {
+          newSlots[slotIdx] = {
+            ...existingSlot,
+            widget: {
+              ...existingSlot.widget,
+              widgetData: widgetData ?? existingSlot.widget.widgetData,
+              functionCode: functionCode !== undefined ? functionCode : existingSlot.widget.functionCode,
+            },
+          };
+        }
+
+        return { ...block, slots: newSlots };
+      });
+
+      if (!result.updated) {
         return NextResponse.json({ ok: false, error: "Block not found in layout" }, { status: 404 });
       }
 
-      const block = layout[blockIdx];
-      const newSlots = [...block.slots];
-      const existingWidget = newSlots[slotIdx];
+      await prisma.dashboardLayout.update({
+        where: { id: layoutId },
+        data: { layout: JSON.stringify(result.blocks) },
+      });
 
-      if (existingWidget) {
-        newSlots[slotIdx] = {
-          ...existingWidget,
-          widgetData: widgetData ?? existingWidget.widgetData,
-          functionCode: functionCode !== undefined ? functionCode : existingWidget.functionCode,
-        };
-        layout[blockIdx] = { ...block, slots: newSlots };
-
-        await prisma.dashboardLayout.update({
-          where: { id: layoutId },
-          data: { layout: JSON.stringify(layout) },
-        });
-
-        console.log(`Debug flow: PATCH /api/builder/blocks/data updated layout`, { layoutId, blockId, slotIdx });
-      }
+      console.log(`Debug flow: PATCH /api/builder/blocks/data updated layout`, { layoutId, blockId, slotIdx });
     }
 
     return NextResponse.json({ ok: true });
