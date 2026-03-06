@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Groq from "groq-sdk";
+import * as LucideIcons from "lucide-react";
 import type { GroqChatMessage } from "@/domain/builder/types";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -71,6 +72,17 @@ Return ONLY valid JSON — NO markdown, NO code fences, NO explanations.
 ### Stats Widgets (total-revenue, active-users, etc.)
 { "value": "$12,345", "label": "Total Revenue", "change": "+12.5%", "up": true, "period": "vs last month" }
 
+### Button Widgets (button/* category)
+- Common fields supported by button widgets in this project:
+  - label: string
+  - icon: lucide icon name string (examples: "ArrowUpRight", "Plus", "Upload", "Download", "FileText", "ChevronDown")
+  - buttonBgColor: CSS color string (hex/rgb/hsl/color name)
+  - buttonTextColor: CSS color string
+  - iconColor: CSS color string
+  - arrowBgColor: CSS color string (split-button only)
+- If user asks to change button color/background/text/icon, update these fields.
+- Always preserve existing fields not requested.
+
 ---
 
 ## UPDATE RULES:
@@ -93,9 +105,10 @@ Return ONLY valid JSON — NO markdown, NO code fences, NO explanations.
 6. "change title":
    → Update title field only.
 
-7. ALWAYS preserve ALL fields not mentioned by user.
-8. bars[] and labels[] MUST always be the same length for revenue-chart and line-trend.
-9. Use these colors: #6366f1, #a855f7, #ec4899, #f59e0b, #10b981, #3b82f6, #06b6d4, #f43f5e, #f97316, #14b8a6
+7. For button widgets, icon names must be valid Lucide names in PascalCase (e.g. ArrowUpRight, Plus, Upload, Download).
+8. ALWAYS preserve ALL fields not mentioned by user.
+9. bars[] and labels[] MUST always be the same length for revenue-chart and line-trend.
+10. Use these colors: #6366f1, #a855f7, #ec4899, #f59e0b, #10b981, #3b82f6, #06b6d4, #f43f5e, #f97316, #14b8a6
 `;
 
 interface WidgetUpdateRequest {
@@ -107,6 +120,7 @@ interface WidgetUpdateRequest {
   message: string;
   history: GroqChatMessage[];
   mode?: "data" | "config";
+  promptContext?: string;
 }
 
 interface WidgetUpdateResponse {
@@ -115,12 +129,19 @@ interface WidgetUpdateResponse {
   error?: string;
 }
 
+function isValidLucideIconName(iconName: string): boolean {
+  console.log(`Debug flow: isValidLucideIconName fired with`, { iconName });
+  const result = Object.prototype.hasOwnProperty.call(LucideIcons, iconName);
+  console.log(`Debug flow: isValidLucideIconName result`, { iconName, result });
+  return result;
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse<WidgetUpdateResponse>> {
   console.log(`Debug flow: POST /api/builder/ai-widget-update fired`);
 
   try {
     const body = await request.json() as WidgetUpdateRequest;
-    const { currentWidgetData, widgetId, category, message, history, mode } = body;
+    const { currentWidgetData, widgetId, category, message, history, mode, promptContext } = body;
 
     if (!message || typeof message !== "string") {
       return NextResponse.json({ ok: false, error: "message is required" }, { status: 400 });
@@ -129,7 +150,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<WidgetUpd
     console.log(`Debug flow: POST /api/builder/ai-widget-update params`, { 
       widgetId, 
       category, 
-      currentDataKeys: Object.keys(currentWidgetData) 
+      currentDataKeys: Object.keys(currentWidgetData),
+      hasPromptContext: !!promptContext,
     });
 
     const tableConfigKnowledge = mode === "config" ? `
@@ -173,6 +195,11 @@ ${mode === "config" ? "- Mode: CONFIG (widget configuration/structure)" : mode =
 
 CURRENT WIDGET DATA:
 ${JSON.stringify(currentWidgetData, null, 2)}
+${promptContext ? `
+
+LIVE BUILDER CONTEXT SNAPSHOT:
+${promptContext}
+` : ""}
 
 USER REQUEST: "${message}"
 
@@ -184,7 +211,8 @@ Rules:
 3. Match the exact schema of the current widget
 4. Use realistic values for any new data points
 5. For month labels, use: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-6. For colors, use hex values like #3b82f6, #8b5cf6, #10b981, etc.`;
+6. For colors, use hex values like #3b82f6, #8b5cf6, #10b981, etc.
+7. For button icon updates, use ONLY valid Lucide icon names in PascalCase. Never invent icon names.`;
 
     const messages: Groq.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: systemPrompt },
@@ -210,6 +238,23 @@ Rules:
     }
 
     const updatedWidgetData = JSON.parse(responseText) as Record<string, unknown>;
+    const proposedIcon = typeof updatedWidgetData.icon === "string"
+      ? updatedWidgetData.icon.trim()
+      : "";
+    if (proposedIcon && !isValidLucideIconName(proposedIcon)) {
+      const fallbackIcon = typeof currentWidgetData.icon === "string"
+        ? currentWidgetData.icon.trim()
+        : "";
+      console.warn(`Debug flow: Invalid Lucide icon from AI, reverting`, {
+        proposedIcon,
+        fallbackIcon,
+      });
+      if (fallbackIcon && isValidLucideIconName(fallbackIcon)) {
+        updatedWidgetData.icon = fallbackIcon;
+      } else {
+        delete updatedWidgetData.icon;
+      }
+    }
 
     console.log(`Debug flow: POST /api/builder/ai-widget-update success`, { 
       updatedKeys: Object.keys(updatedWidgetData) 

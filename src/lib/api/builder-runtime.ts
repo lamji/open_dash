@@ -41,13 +41,14 @@ export interface GenerateAiWidgetApiResponse {
 }
 
 export async function generateAiWidgetRequest(
-  prompt: string
+  prompt: string,
+  promptContext?: string
 ): Promise<GenerateAiWidgetApiResponse> {
-  console.log(`Debug flow: generateAiWidgetRequest fired with`, { prompt });
+  console.log(`Debug flow: generateAiWidgetRequest fired with`, { prompt, hasPromptContext: !!promptContext });
   const res = await fetch("/api/builder/ai-widget", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ prompt, promptContext }),
   });
   const data = (await res.json()) as GenerateAiWidgetApiResponse;
   console.log(`Debug flow: generateAiWidgetRequest response`, {

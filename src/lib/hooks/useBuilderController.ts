@@ -7,7 +7,6 @@ import { io } from "socket.io-client";
 import type {
   LayoutType,
   LayoutBlock,
-  LayoutSlot,
   PlacedWidget,
   WidgetTypePicker,
   WidgetVariantPicker,
@@ -21,8 +20,19 @@ import type { WidgetTemplate } from "@/domain/widgets/types";
 import { saveLayout as saveLayoutApi, getWidgets } from "@/lib/api/builder-layouts";
 import { createNavItem, getNavItems, deleteNavItem } from "@/lib/api/builder-nav";
 import { bootstrapSocketServer, generateAiWidgetRequest, postBuilderLog } from "@/lib/api/builder-runtime";
-import { saveBlockStyles, generateAiStyle, generateAiWidgetUpdate, saveWidgetData as saveWidgetDataApi, saveGridRatio as saveGridRatioApi } from "@/lib/api/builder-styles";
+import { saveBlockStyles, generateAiStyle, generateAiWidgetUpdate, generateAiAssistant, saveWidgetData as saveWidgetDataApi, saveGridRatio as saveGridRatioApi } from "@/lib/api/builder-styles";
 import type { DashboardTemplate } from "@/lib/dashboard-templates";
+import {
+  createEmptySlot,
+  createBlock,
+  findBlockInTree,
+  LEGACY_GROUPED_BUTTON_WIDGETS,
+  normalizeBlocks,
+  removeBlockFromTree,
+  TEMPLATE_BLOCK_MAP,
+  updateBlockInTree,
+} from "./modules/useBuilderController.helpers";
+import { useBuilderPromptContext } from "./modules/useBuilderPromptContext";
 
 export const BUILDER_CATEGORIES = [
   "stats",
@@ -42,10 +52,230 @@ export const BUILDER_CATEGORIES = [
   "form",
 ] as const;
 
-const LEGACY_GROUPED_BUTTON_WIDGETS = new Set(["upload-buttons", "button-variant-set"]);
+const CSS_PROPERTY_ALIASES: Record<string, string> = {
+  align: "align-items",
+};
+
+const FLEX_LAYOUT_PROPS = new Set([
+  "justify-content",
+  "align-items",
+  "align-content",
+  "flex-direction",
+  "flex-wrap",
+  "row-gap",
+  "column-gap",
+]);
+
+const NON_FLEX_DISPLAY_VALUES = new Set([
+  "block",
+  "inline",
+  "inline-block",
+  "contents",
+]);
+
+const BUTTON_INNER_STYLE_KEYWORDS = [
+  "button",
+  "cta",
+  "icon",
+  "label",
+  "text",
+  "background",
+  "bg",
+  "color",
+  "arrow",
+  "variant",
+  "primary",
+  "secondary",
+  "outline",
+  "ghost",
+  "link",
+  "destructive",
+  "upload",
+];
+
+const CONTAINER_LAYOUT_KEYWORDS = [
+  "container",
+  "contain",
+  "wrapper",
+  "column",
+  "align",
+  "justify",
+  "display",
+  "flex",
+  "gap",
+  "padding",
+  "margin",
+  "width",
+  "height",
+  "position",
+  "center",
+];
+
+const STYLE_REQUEST_KEYWORDS = [
+  "height",
+  "width",
+  "padding",
+  "margin",
+  "background",
+  "border",
+  "shadow",
+  "radius",
+  "opacity",
+  "flex",
+  "align",
+  "justify",
+  "gap",
+  "display",
+  "overflow",
+  "position",
+  "transform",
+  "transition",
+  "font",
+  "text-",
+  "style",
+];
+
+const DATA_OR_CONFIG_KEYWORDS = [
+  "color",
+  "month",
+  "label",
+  "data",
+  "value",
+  "bar",
+  "segment",
+  "chart",
+  "complete",
+  "add",
+  "change title",
+  "update",
+  "rename",
+  "title",
+  "disabled",
+  "enable",
+  "feature",
+  "pagination",
+  "sorting",
+  "filter",
+  "column",
+];
+
+const ASSISTANT_INTENT_PREFIXES = [
+  "how",
+  "what",
+  "why",
+  "can ",
+  "is ",
+  "are ",
+  "where",
+  "which",
+  "when",
+  "help",
+];
+
+function detectButtonWidgetDataIntent(messageLower: string): boolean {
+  console.log(`Debug flow: detectButtonWidgetDataIntent fired with`, { messageLower });
+  const hasButtonInnerKeyword = BUTTON_INNER_STYLE_KEYWORDS.some((keyword) => messageLower.includes(keyword));
+  const hasLayoutKeyword = CONTAINER_LAYOUT_KEYWORDS.some((keyword) => messageLower.includes(keyword))
+    || /\b(move|position|right|left|middle|top|bottom|side)\b/.test(messageLower);
+  const result = hasButtonInnerKeyword && !hasLayoutKeyword;
+  console.log(`Debug flow: detectButtonWidgetDataIntent result`, {
+    hasButtonInnerKeyword,
+    hasLayoutKeyword,
+    result,
+  });
+  return result;
+}
+
+function detectAssistantIntent(messageLower: string): boolean {
+  console.log(`Debug flow: detectAssistantIntent fired with`, { messageLower });
+  const hasQuestionMark = messageLower.includes("?");
+  const hasPrefix = ASSISTANT_INTENT_PREFIXES.some((prefix) => messageLower.startsWith(prefix));
+  const hasHelpLanguage =
+    messageLower.includes("how to") ||
+    messageLower.includes("how can") ||
+    messageLower.includes("not sure") ||
+    messageLower.includes("don't know") ||
+    messageLower.includes("dont know") ||
+    messageLower.includes("what should i");
+  const result = hasQuestionMark || hasPrefix || hasHelpLanguage;
+  console.log(`Debug flow: detectAssistantIntent result`, { hasQuestionMark, hasPrefix, hasHelpLanguage, result });
+  return result;
+}
+
+function mapAssistantResponseTypeToMode(
+  responseType?: "answer" | "execute_styles" | "execute_data" | "execute_config" | "clarify"
+): "styles" | "data" | "config" | null {
+  console.log(`Debug flow: mapAssistantResponseTypeToMode fired with`, { responseType });
+  if (responseType === "execute_styles") {
+    return "styles";
+  }
+  if (responseType === "execute_data") {
+    return "data";
+  }
+  if (responseType === "execute_config") {
+    return "config";
+  }
+  return null;
+}
+
+function isCssDeclarationValid(prop: string, val: string): boolean {
+  console.log(`Debug flow: isCssDeclarationValid fired with`, { prop, val });
+  if (typeof document === "undefined") {
+    return true;
+  }
+  if (prop.startsWith("--")) {
+    return true;
+  }
+  const style = document.createElement("div").style;
+  style.setProperty(prop, "");
+  style.setProperty(prop, val);
+  const appliedValue = style.getPropertyValue(prop).trim();
+  const result = appliedValue.length > 0;
+  console.log(`Debug flow: isCssDeclarationValid result`, { prop, result, appliedValue });
+  return result;
+}
+
+function normalizeCssDeclarations(css: string): string {
+  console.log(`Debug flow: normalizeCssDeclarations fired with`, { cssLength: css.length });
+  if (!css.trim()) {
+    return "";
+  }
+  const normalized = css
+    .replace(/,\s*\n\s*/g, "; ")
+    .replace(/\n\s*/g, "; ")
+    .replace(/\r/g, "");
+  const declarations = new Map<string, string>();
+  normalized.split(";").forEach((decl) => {
+    const colonIdx = decl.indexOf(":");
+    if (colonIdx === -1) return;
+    const rawProp = decl.slice(0, colonIdx).trim().toLowerCase();
+    const val = decl.slice(colonIdx + 1).trim();
+    if (!rawProp || !val) return;
+    const prop = CSS_PROPERTY_ALIASES[rawProp] ?? rawProp;
+    if (!isCssDeclarationValid(prop, val)) {
+      return;
+    }
+    declarations.set(prop, val);
+  });
+  const hasFlexLayoutProp = Array.from(declarations.keys()).some((prop) => FLEX_LAYOUT_PROPS.has(prop));
+  const displayValue = declarations.get("display")?.toLowerCase();
+  if (hasFlexLayoutProp && (!displayValue || NON_FLEX_DISPLAY_VALUES.has(displayValue))) {
+    declarations.set("display", "flex");
+  }
+  const result = Array.from(declarations.entries())
+    .map(([prop, val]) => `${prop}: ${val}`)
+    .join("; ");
+  console.log(`Debug flow: normalizeCssDeclarations result`, {
+    declarationCount: declarations.size,
+    resultLength: result.length,
+  });
+  return result;
+}
 
 export function mergeCss(existing: string, incoming: string): string {
   console.log(`Debug flow: mergeCss fired with`, { existingLen: existing.length, incomingLen: incoming.length });
+  const normalizedExisting = normalizeCssDeclarations(existing);
+  const normalizedIncoming = normalizeCssDeclarations(incoming);
   const toMap = (css: string): Map<string, string> => {
     const map = new Map<string, string>();
     css.split(";").forEach((decl) => {
@@ -57,271 +287,15 @@ export function mergeCss(existing: string, incoming: string): string {
     });
     return map;
   };
-  const merged = new Map([...toMap(existing), ...toMap(incoming)]);
-  const result = Array.from(merged.entries())
+  const merged = new Map([...toMap(normalizedExisting), ...toMap(normalizedIncoming)]);
+  const mergedCss = Array.from(merged.entries())
     .filter(([, v]) => v && v.trim())
     .map(([p, v]) => `${p}: ${v}`)
     .join("; ");
+  const result = normalizeCssDeclarations(mergedCss);
   console.log(`Debug flow: mergeCss result`, { resultLen: result.length });
   return result;
 }
-
-function generateId(): string {
-  return Math.random().toString(36).slice(2, 10);
-}
-
-function slotCount(type: LayoutType): number {
-  console.log(`Debug flow: slotCount fired with`, { type });
-  switch (type) {
-    case "single": return 1;
-    case "grid-2": return 2;
-    case "grid-3": return 3;
-    case "grid-4": return 4;
-  }
-}
-
-function createEmptySlot(): LayoutSlot {
-  console.log(`Debug flow: createEmptySlot fired with`, {});
-  return { widget: null, childBlocks: [] };
-}
-
-function createEmptySlots(type: LayoutType): LayoutSlot[] {
-  console.log(`Debug flow: createEmptySlots fired with`, { type });
-  return Array.from({ length: slotCount(type) }, () => createEmptySlot());
-}
-
-function createBlock(type: LayoutType): LayoutBlock {
-  console.log(`Debug flow: createBlock fired with`, { type });
-  return {
-    id: generateId(),
-    type,
-    slots: createEmptySlots(type),
-    gap: "16px",
-    layoutDisplay: "grid",
-    justifyContent: "start",
-    alignItems: "stretch",
-  };
-}
-
-function normalizeSlot(slot: LayoutSlot | PlacedWidget | null): LayoutSlot {
-  console.log(`Debug flow: normalizeSlot fired with`, { hasSlot: !!slot });
-  if (!slot) return createEmptySlot();
-  if ("widget" in slot) {
-    return {
-      widget: slot.widget,
-      childBlocks: normalizeBlocks(slot.childBlocks ?? []),
-    };
-  }
-  return {
-    widget: slot,
-    childBlocks: [],
-  };
-}
-
-function normalizeBlocks(blocks: LayoutBlock[]): LayoutBlock[] {
-  console.log(`Debug flow: normalizeBlocks fired with`, { blockCount: blocks.length });
-  return blocks.map((block) => ({
-    ...block,
-    slots: block.slots.map((slot) => normalizeSlot(slot as LayoutSlot | PlacedWidget | null)),
-    gap: block.gap ?? "16px",
-    layoutDisplay: block.layoutDisplay ?? "grid",
-    justifyContent: block.justifyContent ?? "start",
-    alignItems: block.alignItems ?? "stretch",
-  }));
-}
-
-function findBlockInTree(blocks: LayoutBlock[], blockId: string): LayoutBlock | null {
-  console.log(`Debug flow: findBlockInTree fired with`, { blockId, blockCount: blocks.length });
-  for (const block of blocks) {
-    if (block.id === blockId) {
-      return block;
-    }
-    for (const slot of block.slots) {
-      const found = findBlockInTree(slot.childBlocks ?? [], blockId);
-      if (found) {
-        return found;
-      }
-    }
-  }
-  return null;
-}
-
-function updateBlockInTree(
-  blocks: LayoutBlock[],
-  blockId: string,
-  updater: (block: LayoutBlock) => LayoutBlock
-): { blocks: LayoutBlock[]; updated: boolean } {
-  console.log(`Debug flow: updateBlockInTree fired with`, { blockId, blockCount: blocks.length });
-  let updated = false;
-  const nextBlocks = blocks.map((block) => {
-    if (block.id === blockId) {
-      updated = true;
-      return updater(block);
-    }
-
-    let childUpdated = false;
-    const nextSlots = block.slots.map((slot) => {
-      const childBlocks = slot.childBlocks ?? [];
-      if (childBlocks.length === 0) {
-        return slot;
-      }
-      const result = updateBlockInTree(childBlocks, blockId, updater);
-      if (!result.updated) {
-        return slot;
-      }
-      childUpdated = true;
-      return { ...slot, childBlocks: result.blocks };
-    });
-
-    if (!childUpdated) {
-      return block;
-    }
-
-    updated = true;
-    return { ...block, slots: nextSlots };
-  });
-
-  return { blocks: updated ? nextBlocks : blocks, updated };
-}
-
-function removeBlockFromTree(blocks: LayoutBlock[], blockId: string): LayoutBlock[] {
-  console.log(`Debug flow: removeBlockFromTree fired with`, { blockId, blockCount: blocks.length });
-  return blocks
-    .filter((block) => block.id !== blockId)
-    .map((block) => ({
-      ...block,
-      slots: block.slots.map((slot) => ({
-        ...slot,
-        childBlocks: removeBlockFromTree(slot.childBlocks ?? [], blockId),
-      })),
-    }));
-}
-
-type BlockDef = { type: LayoutType; slots: (PlacedWidget | null)[] };
-
-const w = (widgetId: string, category: PlacedWidget["category"], title: string, widgetData: Record<string, unknown> = {}): PlacedWidget => ({
-  widgetId,
-  category,
-  title,
-  widgetData,
-});
-
-const TEMPLATE_BLOCK_MAP: Record<string, BlockDef[]> = {
-  "metrics-overview": [
-    {
-      type: "grid-4",
-      slots: [
-        w("revenue-kpi",      "stats",  "Total Revenue",    { value: "$45,231", label: "Total Revenue",    trend: "+12.5%", trendUp: true,  period: "This month" }),
-        w("user-growth",      "stats",  "Active Users",     { value: "12,543",  label: "Active Users",     trend: "+8.2%",  trendUp: true,  period: "This week"  }),
-        w("conversion-rate",  "stats",  "Conversion Rate",  { value: "3.24%",   label: "Conversion Rate",  trend: "-1.2%",  trendUp: false, period: "vs last week" }),
-        w("sparkline",        "stats",  "Page Views",       { value: "2,543",   label: "Page Views",       bars: [30,45,35,60,50,70,65,80,75,85,90,95], period: "Today" }),
-      ],
-    },
-    {
-      type: "single",
-      slots: [
-        w("revenue-chart", "charts", "Monthly Revenue", { title: "Monthly Revenue", bars: [50,65,80,100,75,90,88,95], labels: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug"] }),
-      ],
-    },
-  ],
-
-  "split-dashboard": [
-    {
-      type: "grid-2",
-      slots: [
-        w("revenue-kpi",  "stats", "Total Revenue", { value: "$45,231", label: "Total Revenue", trend: "+12.5%", trendUp: true, period: "This month" }),
-        w("user-growth",  "stats", "Active Users",  { value: "12,543",  label: "Active Users",  trend: "+8.2%",  trendUp: true, period: "This week"  }),
-      ],
-    },
-    {
-      type: "single",
-      slots: [
-        w("revenue-chart", "charts", "Revenue Overview", { title: "Revenue Overview", bars: [50,65,80,100,75,90], labels: ["Jan","Feb","Mar","Apr","May","Jun"] }),
-      ],
-    },
-    {
-      type: "single",
-      slots: [
-        w("orders-table", "table", "Recent Orders"),
-      ],
-    },
-  ],
-
-  "grid-dashboard": [
-    {
-      type: "grid-3",
-      slots: [
-        w("revenue-kpi",     "stats", "Total Revenue",   { value: "$45,231", label: "Total Revenue",   trend: "+12.5%", trendUp: true,  period: "This month" }),
-        w("user-growth",     "stats", "Active Users",    { value: "12,543",  label: "Active Users",    trend: "+8.2%",  trendUp: true,  period: "This week"  }),
-        w("conversion-rate", "stats", "Conversion Rate", { value: "3.24%",   label: "Conversion Rate", trend: "-1.2%",  trendUp: false, period: "vs last week" }),
-      ],
-    },
-    {
-      type: "grid-3",
-      slots: [
-        w("sparkline",    "stats", "Page Views",  { value: "2,543", label: "Page Views", bars: [30,45,35,60,50,70,65,80], period: "Today" }),
-        w("mrr",          "stats", "MRR",         { value: "$89,200", label: "Monthly Recurring Revenue", trend: "+15.8%", trendUp: true, period: "This month" }),
-        w("satisfaction", "stats", "Satisfaction",{ value: "4.8", label: "Customer Satisfaction", filledStars: 4, reviews: 1234 }),
-      ],
-    },
-  ],
-
-  "analytics-dashboard": [
-    {
-      type: "single",
-      slots: [
-        w("line-trend", "charts", "Revenue Trend", { title: "Revenue Trend", points: [20,35,28,45,38,55,48,62,55,70,65,78], labels: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"] }),
-      ],
-    },
-    {
-      type: "grid-4",
-      slots: [
-        w("revenue-kpi",     "stats", "Total Revenue",   { value: "$45,231", label: "Total Revenue",   trend: "+12.5%", trendUp: true,  period: "This month" }),
-        w("user-growth",     "stats", "Active Users",    { value: "12,543",  label: "Active Users",    trend: "+8.2%",  trendUp: true,  period: "This week"  }),
-        w("conversion-rate", "stats", "Conversion Rate", { value: "3.24%",   label: "Conversion Rate", trend: "-1.2%",  trendUp: false, period: "vs last week" }),
-        w("realtime-users",  "stats", "Live Users",      { value: "1,234",   label: "Active Users Now", period: "Online right now", live: true }),
-      ],
-    },
-  ],
-
-  "monitoring-dashboard": [
-    {
-      type: "single",
-      slots: [
-        w("revenue-chart",  "charts", "Monthly Revenue",  { title: "Monthly Revenue",  bars: [50,65,80,100,75,90,88,95], labels: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug"] }),
-      ],
-    },
-    {
-      type: "single",
-      slots: [
-        w("activity-chart", "charts", "User Activity",    { title: "User Activity",    bars: [40,60,45,80,55,70,65,85,75,90,80,95] }),
-      ],
-    },
-    {
-      type: "single",
-      slots: [
-        w("traffic-pie",    "charts", "Traffic Sources",  { title: "Traffic Sources",  segments: [{ label: "Direct", value: "45%", pct: 45, color: "#6366f1" }, { label: "Organic", value: "30%", pct: 30, color: "#a855f7" }, { label: "Social", value: "25%", pct: 25, color: "#ec4899" }] }),
-      ],
-    },
-  ],
-
-  "kpi-dashboard": [
-    {
-      type: "grid-2",
-      slots: [
-        w("revenue-kpi",    "stats",  "Total Revenue",  { value: "$45,231", label: "Total Revenue",  trend: "+12.5%", trendUp: true, period: "This month" }),
-        w("revenue-chart",  "charts", "Revenue Chart",  { title: "Revenue Chart", bars: [50,65,80,100,75,90], labels: ["Jan","Feb","Mar","Apr","May","Jun"] }),
-      ],
-    },
-    {
-      type: "grid-2",
-      slots: [
-        w("user-growth",    "stats",  "Active Users",   { value: "12,543", label: "Active Users",  trend: "+8.2%", trendUp: true, period: "This week" }),
-        w("activity-chart", "charts", "Activity Chart", { title: "Activity Chart", bars: [40,60,45,80,55,70,65,85] }),
-      ],
-    },
-  ],
-};
 
 function buildLog(message: string, metadata: Record<string, unknown> = {}) {
   console.log(`[builder-trace] ${message}`, metadata);
@@ -371,6 +345,7 @@ export function useBuilder() {
   const [layoutId, setLayoutId] = useState<string | null>(null);
   const [dataJsonError, setDataJsonError] = useState<string | null>(null);
   const [gridRatioModal, setGridRatioModal] = useState<{blockId: string} | null>(null);
+  const { buildPromptContext } = useBuilderPromptContext(blocks);
 
   const navItemsQuery = useQuery({
     queryKey: navItemsQueryKey,
@@ -629,9 +604,16 @@ export function useBuilder() {
       console.log(logLine);
     };
 
-    logEntry('START', { blockId, slotIdx, prompt });
+    const promptContextResult = buildPromptContext(blockId, slotIdx, "");
+    logEntry('START', {
+      blockId,
+      slotIdx,
+      prompt,
+      hasPromptContext: !!promptContextResult?.promptContext,
+      promptContextLength: promptContextResult?.promptContext.length ?? 0,
+    });
     try {
-      const data = await generateAiWidgetRequest(prompt);
+      const data = await generateAiWidgetRequest(prompt, promptContextResult?.promptContext);
       logEntry('API Response received', { ok: data.ok, widgetId: data.widget?.widgetId, hasError: !!data.error });
 
       if (!data.ok || !data.widget) {
@@ -798,22 +780,23 @@ export function useBuilder() {
     if (!cssEditorState) return;
     const { blockId, slotIdx } = cssEditorState;
     const isBlockLevel = slotIdx === -1;
+    const normalizedCss = normalizeCssDeclarations(css);
 
     const normalizedBlocks = normalizeBlocks(blocks);
     const updatedResult = updateBlockInTree(normalizedBlocks, blockId, (block) => {
       if (isBlockLevel) {
-        console.log(`[Styles] Saving block-level CSS`, { blockId, css });
-        return { ...block, blockStyles: css };
+        console.log(`[Styles] Saving block-level CSS`, { blockId, css: normalizedCss });
+        return { ...block, blockStyles: normalizedCss };
       }
       const styles = block.columnStyles ? [...block.columnStyles] : [];
-      styles[slotIdx] = css;
-      console.log(`[Styles] Saving column CSS`, { blockId, slotIdx, css });
+      styles[slotIdx] = normalizedCss;
+      console.log(`[Styles] Saving column CSS`, { blockId, slotIdx, css: normalizedCss });
       return { ...block, columnStyles: styles };
     });
 
     setBlocks(updatedResult.blocks);
 
-    const result = await saveBlockStyles(blockId, isBlockLevel ? -1 : slotIdx, css, layoutId ?? undefined, updatedResult.blocks);
+    const result = await saveBlockStyles(blockId, isBlockLevel ? -1 : slotIdx, normalizedCss, layoutId ?? undefined, updatedResult.blocks);
     if (result.ok && result.layoutId && !layoutId) {
       console.log(`Debug flow: saveCssStyles captured layoutId`, { layoutId: result.layoutId });
       setLayoutId(result.layoutId);
@@ -891,11 +874,14 @@ export function useBuilder() {
     const initialCss = isBlockLevel
       ? block.blockStyles ?? ""
       : block.columnStyles?.[slotIdx] ?? "";
+    const promptContextResult = buildPromptContext(blockId, slotIdx, initialCss);
     const context: GroqStyleContext = {
       blockId,
       slotIdx,
       currentCss: initialCss,
       blockType: block.type,
+      promptContext: promptContextResult?.promptContext,
+      promptContextSnapshot: promptContextResult?.snapshot,
       widget: widget ? {
         widgetId: widget.widgetId,
         category: widget.category,
@@ -903,6 +889,12 @@ export function useBuilder() {
         widgetData: widget.widgetData,
       } : undefined,
     };
+    console.log(`Debug flow: openGroqChat built prompt context`, {
+      blockId,
+      slotIdx,
+      hasPromptContext: !!promptContextResult?.promptContext,
+      promptContextLength: promptContextResult?.promptContext.length ?? 0,
+    });
     setGroqChatContext(context);
     setGroqMessages([]);
     setCssStateHistory([initialCss]);
@@ -922,7 +914,7 @@ export function useBuilder() {
     if (!groqChatContext || !message.trim()) return;
 
     // Parse slash command prefix
-    let forcedMode: "styles" | "data" | "config" | null = null;
+    let forcedMode: "styles" | "data" | "config" | "help" | null = null;
     let cleanMessage = message;
 
     if (message.startsWith("/styles ")) {
@@ -934,6 +926,9 @@ export function useBuilder() {
     } else if (message.startsWith("/config ")) {
       forcedMode = "config";
       cleanMessage = message.slice("/config ".length).trim();
+    } else if (message === "/help" || message.startsWith("/help ")) {
+      forcedMode = "help";
+      cleanMessage = message === "/help" ? "help me with this selected target" : message.slice("/help ".length).trim();
     }
 
     const messageLower = cleanMessage.toLowerCase().trim();
@@ -979,53 +974,92 @@ export function useBuilder() {
     setGroqMessages(updatedHistory);
     setGroqChatLoading(true);
 
-    // Determine intent: forced mode overrides keyword detection
-    const isStyleRequest =
-      forcedMode === "styles" ||
-      (!forcedMode && (
-        messageLower.includes("height") ||
-        messageLower.includes("width") ||
-        messageLower.includes("padding") ||
-        messageLower.includes("margin") ||
-        messageLower.includes("background") ||
-        messageLower.includes("border") ||
-        messageLower.includes("shadow") ||
-        messageLower.includes("radius") ||
-        messageLower.includes("opacity") ||
-        messageLower.includes("flex") ||
-        messageLower.includes("align") ||
-        messageLower.includes("justify") ||
-        messageLower.includes("gap") ||
-        messageLower.includes("display") ||
-        messageLower.includes("overflow") ||
-        messageLower.includes("position") ||
-        messageLower.includes("transform") ||
-        messageLower.includes("transition") ||
-        messageLower.includes("font") ||
-        messageLower.includes("text-") ||
-        messageLower.includes("style")
-      ));
+    let resolvedMode: "styles" | "data" | "config" | null =
+      forcedMode === "styles" || forcedMode === "data" || forcedMode === "config"
+        ? forcedMode
+        : null;
+    let assistantResultForMessage: Awaited<ReturnType<typeof generateAiAssistant>> | null = null;
 
-    const isWidgetDataUpdate =
-      (forcedMode === "data" || forcedMode === "config") ||
-      (!isStyleRequest && groqChatContext.widget && !forcedMode && (
-        messageLower.includes("color") ||
-        messageLower.includes("month") ||
-        messageLower.includes("label") ||
-        messageLower.includes("data") ||
-        messageLower.includes("value") ||
-        messageLower.includes("bar") ||
-        messageLower.includes("segment") ||
-        messageLower.includes("chart") ||
-        messageLower.includes("complete") ||
-        messageLower.includes("add") ||
-        messageLower.includes("change title") ||
-        messageLower.includes("update")
-      ));
-
-    console.log(`Debug flow: sendGroqMessage intent detection`, { forcedMode, isStyleRequest, isWidgetDataUpdate, hasWidget: !!groqChatContext.widget });
+    const contextualPromptLength = groqChatContext.promptContext
+      ? `${cleanMessage}\n\n${groqChatContext.promptContext}`.length
+      : cleanMessage.length;
 
     try {
+      if (forcedMode === "help" || !resolvedMode) {
+        assistantResultForMessage = await generateAiAssistant(
+          groqChatContext.blockId,
+          groqChatContext.slotIdx,
+          groqChatContext.blockType,
+          groqChatContext.currentCss,
+          cleanMessage,
+          groqMessages,
+          groqChatContext.widget,
+          groqChatContext.promptContext
+        );
+      }
+
+      if (forcedMode === "help" && assistantResultForMessage) {
+        const suggestedModeHint = assistantResultForMessage.recommendedMode && assistantResultForMessage.recommendedMode !== "none"
+          ? `\n\nSuggested command mode: /${assistantResultForMessage.recommendedMode}`
+          : "";
+        const assistantContent = (assistantResultForMessage.reply ?? assistantResultForMessage.error ?? "I couldn't answer that yet.")
+          + suggestedModeHint;
+        setGroqMessages((prev) => [...prev, { role: "assistant", content: assistantContent }]);
+        return;
+      }
+
+      if (!resolvedMode && assistantResultForMessage?.ok) {
+        const modeFromResponseType = mapAssistantResponseTypeToMode(assistantResultForMessage.responseType);
+        const modeFromRecommendation = assistantResultForMessage.recommendedMode && assistantResultForMessage.recommendedMode !== "none"
+          ? assistantResultForMessage.recommendedMode
+          : null;
+        resolvedMode = modeFromResponseType ?? modeFromRecommendation;
+
+        if (!resolvedMode || assistantResultForMessage.responseType === "answer" || assistantResultForMessage.responseType === "clarify") {
+          const suggestedModeHint = assistantResultForMessage.recommendedMode && assistantResultForMessage.recommendedMode !== "none"
+            ? `\n\nSuggested command mode: /${assistantResultForMessage.recommendedMode}`
+            : "";
+          const assistantContent = (assistantResultForMessage.reply ?? "I couldn't answer that yet.") + suggestedModeHint;
+          setGroqMessages((prev) => [...prev, { role: "assistant", content: assistantContent }]);
+          return;
+        }
+      }
+
+      if (!resolvedMode) {
+        // Fallback heuristic only when assistant routing fails.
+        const isStyleRequest = STYLE_REQUEST_KEYWORDS.some((keyword) => messageLower.includes(keyword));
+        const isButtonWidget = groqChatContext.widget?.category === "button";
+        const shouldRouteButtonVisualToData = isButtonWidget
+          && detectButtonWidgetDataIntent(messageLower);
+        const hasDataOrConfigKeyword = DATA_OR_CONFIG_KEYWORDS.some((keyword) => messageLower.includes(keyword));
+        resolvedMode = (shouldRouteButtonVisualToData || (!isStyleRequest && hasDataOrConfigKeyword))
+          ? "data"
+          : "styles";
+      }
+
+      const isWidgetDataUpdate = resolvedMode === "data" || resolvedMode === "config";
+      const widgetUpdateMode: "data" | "config" | undefined =
+        resolvedMode === "data" || resolvedMode === "config"
+          ? resolvedMode
+          : undefined;
+
+      console.log(`Debug flow: sendGroqMessage intent detection`, {
+        forcedMode,
+        resolvedMode,
+        assistantResponseType: assistantResultForMessage?.responseType,
+        assistantRecommendedMode: assistantResultForMessage?.recommendedMode,
+        isWidgetDataUpdate,
+        hasWidget: !!groqChatContext.widget,
+        hasPromptContext: !!groqChatContext.promptContext,
+        contextualPromptLength,
+      });
+
+      if (isWidgetDataUpdate && !groqChatContext.widget) {
+        const missingWidgetMessage = "This target has no widget data to edit yet. Select a filled widget slot or ask for /styles to change container layout.";
+        setGroqMessages((prev) => [...prev, { role: "assistant", content: missingWidgetMessage }]);
+        return;
+      }
+
       if (isWidgetDataUpdate && groqChatContext.widget) {
         const result = await generateAiWidgetUpdate(
           groqChatContext.blockId,
@@ -1035,7 +1069,8 @@ export function useBuilder() {
           groqChatContext.widget.category,
           cleanMessage,
           groqMessages,
-          (forcedMode === "data" || forcedMode === "config") ? forcedMode : undefined
+          widgetUpdateMode,
+          groqChatContext.promptContext
         );
 
         if (result.ok && result.widgetData) {
@@ -1072,10 +1107,19 @@ export function useBuilder() {
           cleanMessage,
           groqMessages,
           groqChatContext.widget,
-          forcedMode === "styles" ? "styles" : undefined
+          resolvedMode === "styles" ? "styles" : undefined,
+          groqChatContext.promptContext
         );
-        const assistantContent = result.css ?? "Sorry, could not generate styles.";
+        const assistantContent = result.clarificationQuestion ?? result.css ?? "Sorry, could not generate styles.";
         setGroqMessages((prev) => [...prev, { role: "assistant", content: assistantContent }]);
+        if (result.ok && result.needsClarification) {
+          console.log(`Debug flow: sendGroqMessage clarification required`, {
+            blockId: groqChatContext.blockId,
+            slotIdx: groqChatContext.slotIdx,
+            question: result.clarificationQuestion,
+          });
+          return;
+        }
         if (result.ok && result.css) {
           const { blockId, slotIdx } = groqChatContext;
           const isBlockLevel = slotIdx < 0;

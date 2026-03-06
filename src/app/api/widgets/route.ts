@@ -48,6 +48,10 @@ export const DEFAULT_WIDGETS = [
   { slug: "upload-button-dashed", title: "Drag Upload Button", description: "Single dashed upload button", category: "button", jsxCode: JSON.stringify({ label: "Drag and upload", description: "Dashed upload button", variant: "upload-dashed" }) },
   { slug: "upload-buttons", title: "Upload Button Variants", description: "Multiple upload button styles: solid, outline, and dashed", category: "button", jsxCode: JSON.stringify({ labels: ["Upload file", "Upload assets", "Drag and upload"] }) },
   { slug: "button-variant-set", title: "Button Variant Set", description: "Default, secondary, outline, ghost, link, and destructive button variants", category: "button", jsxCode: JSON.stringify({ labels: { default: "Default", secondary: "Secondary", outline: "Outline", ghost: "Ghost", link: "Link", destructive: "Destructive" } }) },
+  { slug: "search-bar", title: "Search Bar", description: "Simple search input with icon", category: "search", jsxCode: JSON.stringify({ placeholder: "Search anything..." }) },
+  { slug: "search-with-filters", title: "Search With Filters", description: "Search input with filter chips and quick results", category: "search", jsxCode: JSON.stringify({ placeholder: "Search users...", filters: [{ label: "All", active: true }, { label: "Active" }, { label: "Inactive" }, { label: "Admin" }] }) },
+  { slug: "global-search", title: "Global Search", description: "Search with categories and recent history", category: "search", jsxCode: JSON.stringify({ placeholder: "Search dashboards...", categories: [{ label: "Pages", count: 12 }, { label: "Users", count: 48 }, { label: "Reports", count: 7 }], recent: ["Revenue report", "User analytics", "Q4 dashboard"] }) },
+  { slug: "search-variant-set", title: "Search Variant Set", description: "Basic, filtered, and global search variants in one set", category: "search", jsxCode: JSON.stringify({ placeholders: { basic: "Search anything...", filtered: "Search users...", global: "Search dashboards..." }, filters: ["All", "Active", "Inactive"] }) },
 ];
 
 const WIDGET_CACHE_KEY = "widgets:all";

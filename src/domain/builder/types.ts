@@ -12,6 +12,29 @@ export interface PlacedWidget {
   functionCode?: string;
 }
 
+export interface BuilderPromptWidgetContext {
+  slotIdx: number;
+  widgetId: string;
+  category: WidgetCategory;
+  title: string;
+  widgetData: Record<string, unknown>;
+  functionCode?: string;
+}
+
+export interface BuilderPromptContextSnapshot {
+  blockId: string;
+  blockType: LayoutType;
+  slotIdx: number;
+  isBlockLevel: boolean;
+  currentCss: string;
+  blockStyles?: string;
+  columnStyles?: string[];
+  targetWidget?: BuilderPromptWidgetContext;
+  siblingWidgets: BuilderPromptWidgetContext[];
+  nestedWidgets: BuilderPromptWidgetContext[];
+  availableLucideIcons: string[];
+}
+
 export interface LayoutSlot {
   widget: PlacedWidget | null;
   childBlocks?: LayoutBlock[];
@@ -48,6 +71,8 @@ export interface GroqStyleContext {
   slotIdx: number;
   currentCss: string;
   blockType: LayoutType;
+  promptContext?: string;
+  promptContextSnapshot?: BuilderPromptContextSnapshot;
   widget?: {
     widgetId: string;
     category: string;

@@ -2497,13 +2497,42 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   "split-button": (data) => {
     const label = (data.label as string) ?? "Export";
-    console.log(`Debug flow: split-button preview fired with`, { label });
+    const iconName = (data.icon as string | undefined)?.trim();
+    const buttonBgColor = (data.buttonBgColor as string | undefined)?.trim();
+    const buttonTextColor = (data.buttonTextColor as string | undefined)?.trim();
+    const iconColor = (data.iconColor as string | undefined)?.trim();
+    const arrowBgColor = (data.arrowBgColor as string | undefined)?.trim();
+    console.log(`Debug flow: split-button preview fired with`, {
+      label,
+      iconName,
+      buttonBgColor,
+      buttonTextColor,
+      iconColor,
+      arrowBgColor,
+    });
     return (
       <div className="flex flex-col h-full justify-center gap-3" data-test-id="split-button-container">
         <p className="text-xs text-slate-500" data-test-id="split-button-label">Split Button</p>
-        <div className="inline-flex w-fit items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm" data-test-id="split-button-wrapper">
+        <div
+          className="inline-flex w-fit items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm"
+          style={{
+            ...(buttonBgColor ? { backgroundColor: buttonBgColor } : {}),
+            ...(buttonTextColor ? { color: buttonTextColor } : {}),
+          }}
+          data-test-id="split-button-wrapper"
+        >
           <span data-test-id="split-button-main">{label}</span>
-          <span className="rounded-md bg-blue-700/70 p-1" data-test-id="split-button-arrow"><ChevronDown className="w-4 h-4" data-test-id="split-button-arrow-icon" /></span>
+          <span
+            className="rounded-md bg-blue-700/70 p-1"
+            style={arrowBgColor ? { backgroundColor: arrowBgColor } : undefined}
+            data-test-id="split-button-arrow"
+          >
+            <span style={iconColor ? { color: iconColor } : undefined} data-test-id="split-button-arrow-icon">
+              {iconName
+                ? <DynamicIcon name={iconName} className="w-4 h-4" />
+                : <ChevronDown className="w-4 h-4" />}
+            </span>
+          </span>
         </div>
       </div>
     );
@@ -2513,11 +2542,26 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   "button-left-icon": (data) => {
     const label = (data.label as string) ?? "Create Report";
-    console.log(`Debug flow: button-left-icon preview fired with`, { label });
+    const iconName = (data.icon as string | undefined)?.trim();
+    const buttonBgColor = (data.buttonBgColor as string | undefined)?.trim();
+    const buttonTextColor = (data.buttonTextColor as string | undefined)?.trim();
+    const iconColor = (data.iconColor as string | undefined)?.trim();
+    console.log(`Debug flow: button-left-icon preview fired with`, { label, iconName, buttonBgColor, buttonTextColor, iconColor });
     return (
       <div className="flex h-full items-center" data-test-id="button-left-icon-container">
-        <button className="w-full min-w-0 px-3 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg inline-flex items-center justify-center gap-2 hover:bg-indigo-700" data-test-id="button-left-icon-btn">
-          <Plus className="w-4 h-4" data-test-id="button-left-icon-symbol" />
+        <button
+          className="w-full min-w-0 px-3 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg inline-flex items-center justify-center gap-2 hover:bg-indigo-700"
+          style={{
+            ...(buttonBgColor ? { backgroundColor: buttonBgColor } : {}),
+            ...(buttonTextColor ? { color: buttonTextColor } : {}),
+          }}
+          data-test-id="button-left-icon-btn"
+        >
+          <span style={iconColor ? { color: iconColor } : undefined} data-test-id="button-left-icon-symbol">
+            {iconName
+              ? <DynamicIcon name={iconName} className="w-4 h-4" />
+              : <Plus className="w-4 h-4" />}
+          </span>
           <span className="truncate" data-test-id="button-left-icon-label">{label}</span>
         </button>
       </div>
@@ -2526,12 +2570,27 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   "button-right-icon": (data) => {
     const label = (data.label as string) ?? "View Details";
-    console.log(`Debug flow: button-right-icon preview fired with`, { label });
+    const iconName = (data.icon as string | undefined)?.trim();
+    const buttonBgColor = (data.buttonBgColor as string | undefined)?.trim();
+    const buttonTextColor = (data.buttonTextColor as string | undefined)?.trim();
+    const iconColor = (data.iconColor as string | undefined)?.trim();
+    console.log(`Debug flow: button-right-icon preview fired with`, { label, iconName, buttonBgColor, buttonTextColor, iconColor });
     return (
       <div className="flex h-full items-center" data-test-id="button-right-icon-container">
-        <button className="w-fit px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg inline-flex items-center gap-2 hover:bg-emerald-700" data-test-id="button-right-icon-btn">
+        <button
+          className="w-fit px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg inline-flex items-center gap-2 hover:bg-emerald-700"
+          style={{
+            ...(buttonBgColor ? { backgroundColor: buttonBgColor } : {}),
+            ...(buttonTextColor ? { color: buttonTextColor } : {}),
+          }}
+          data-test-id="button-right-icon-btn"
+        >
           <span data-test-id="button-right-icon-label">{label}</span>
-          <ArrowUpRight className="w-4 h-4" data-test-id="button-right-icon-symbol" />
+          <span style={iconColor ? { color: iconColor } : undefined} data-test-id="button-right-icon-symbol">
+            {iconName
+              ? <DynamicIcon name={iconName} className="w-4 h-4" />
+              : <ArrowUpRight className="w-4 h-4" />}
+          </span>
         </button>
       </div>
     );
@@ -2834,6 +2893,41 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
   },
 
   // ── SEARCH ──────────────────────────────────────────────────────
+  "search-variant-set": (data) => {
+    const placeholders = (data.placeholders as Record<string, string>) ?? {
+      basic: "Search anything...",
+      filtered: "Search users...",
+      global: "Search dashboards...",
+    };
+    const filters = (data.filters as string[]) ?? ["All", "Active", "Inactive"];
+    console.log(`Debug flow: search-variant-set preview fired with`, { placeholders, filters });
+    return (
+      <div className="flex flex-col h-full justify-center gap-3" data-test-id="search-variant-set-container">
+        <div className="space-y-0.5" data-test-id="search-variant-set-header">
+          <p className="text-xs font-semibold text-slate-700">Search Variants</p>
+          <p className="text-[11px] text-slate-500">Basic, filtered, and global styles</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-3" data-test-id="search-variant-set-shell">
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-400" data-test-id="search-variant-set-basic">
+            <Search className="w-3.5 h-3.5 text-slate-400" data-test-id="search-variant-set-basic-icon" />
+            <span className="truncate" data-test-id="search-variant-set-basic-placeholder">{placeholders.basic}</span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5" data-test-id="search-variant-set-filters">
+            {filters.map((filter, index) => (
+              <span key={`${filter}-${index}`} className={`${index === 0 ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"} rounded-full px-2 py-1 text-[11px] font-medium`} data-test-id={`search-variant-set-filter-${index}`}>
+                {filter}
+              </span>
+            ))}
+          </div>
+          <div className="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-2" data-test-id="search-variant-set-global">
+            <p className="text-[10px] font-semibold uppercase text-slate-400" data-test-id="search-variant-set-global-label">Global</p>
+            <p className="text-xs text-slate-500 truncate" data-test-id="search-variant-set-global-placeholder">{placeholders.global}</p>
+          </div>
+        </div>
+      </div>
+    );
+  },
+
   "search-bar": (data) => {
     const placeholder = (data.placeholder as string) ?? "Search anything...";
     console.log(`Debug flow: search-bar preview fired with`, { placeholder });
@@ -2841,7 +2935,12 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
       <div className="flex h-full items-center" data-test-id="search-bar-container">
         <div className="flex w-full min-w-0 items-center gap-2 px-3 py-2.5 border border-slate-200 rounded-lg bg-white shadow-sm" data-test-id="search-bar-input-wrapper">
           <Search className="w-4 h-4 text-slate-400 flex-shrink-0" data-test-id="search-bar-icon" />
-          <span className="text-sm text-slate-400 flex-1 truncate" data-test-id="search-bar-input">{placeholder}</span>
+          <Input
+            type="text"
+            placeholder={placeholder}
+            className="h-auto border-0 bg-transparent p-0 text-sm text-slate-700 placeholder:text-slate-400 shadow-none focus-visible:ring-0"
+            data-test-id="search-bar-input"
+          />
         </div>
       </div>
     );
@@ -2854,7 +2953,12 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
       <div className="flex flex-col h-full gap-2" data-test-id="search-filters-container">
         <div className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg" data-test-id="search-filters-input-row">
           <Search className="w-3.5 h-3.5 text-slate-400" data-test-id="search-filters-icon" />
-          <span className="text-xs text-slate-400 flex-1" data-test-id="search-filters-input">{placeholder}</span>
+          <Input
+            type="text"
+            placeholder={placeholder}
+            className="h-auto border-0 bg-transparent p-0 text-xs text-slate-700 placeholder:text-slate-400 shadow-none focus-visible:ring-0"
+            data-test-id="search-filters-input"
+          />
           <Filter className="w-3.5 h-3.5 text-slate-400" data-test-id="search-filters-filter-icon" />
         </div>
         <div className="flex gap-1 flex-wrap" data-test-id="search-filters-chips">
@@ -2882,7 +2986,12 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
       <div className="border border-slate-200 rounded-xl overflow-hidden" data-test-id="global-search-container">
         <div className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-100" data-test-id="global-search-input-row">
           <Search className="w-4 h-4 text-slate-400" data-test-id="global-search-icon" />
-          <span className="text-sm text-slate-400 flex-1" data-test-id="global-search-input">{placeholder}</span>
+          <Input
+            type="text"
+            placeholder={placeholder}
+            className="h-auto border-0 bg-transparent p-0 text-sm text-slate-700 placeholder:text-slate-400 shadow-none focus-visible:ring-0"
+            data-test-id="global-search-input"
+          />
         </div>
         <div className="px-3 py-1.5" data-test-id="global-search-categories-section">
           <p className="text-[10px] text-slate-400 uppercase font-semibold mb-1" data-test-id="global-search-categories-title">Browse</p>

@@ -175,6 +175,7 @@ function getWidgetCategory(widgetId: string): string | null {
 
 interface GenerateWidgetRequest {
   prompt: string;
+  promptContext?: string;
 }
 
 interface GenerateWidgetResponse {
@@ -206,14 +207,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<GenerateW
 
   try {
     const body = await request.json() as GenerateWidgetRequest;
-    const { prompt } = body;
+    const { prompt, promptContext } = body;
 
     if (!prompt || typeof prompt !== "string") {
       logEntry('ERROR: prompt is required or invalid type', { prompt });
       return NextResponse.json({ ok: false, error: "prompt is required" }, { status: 400 });
     }
 
-    logEntry('Received prompt', { prompt });
+    logEntry('Received prompt', { prompt, hasPromptContext: !!promptContext });
 
     const promptLower = prompt.toLowerCase();
     const widgetKnowledge = buildWidgetKnowledge();
@@ -236,6 +237,13 @@ ${chartKnowledge}
 ${tableKnowledge}
 
 Your task: Given a user's natural language prompt, generate a complete widget configuration.
+${promptContext ? `
+
+LIVE BUILDER CONTEXT SNAPSHOT:
+${promptContext}
+
+Use this snapshot to keep the generated widget aligned with the target column/block context.
+` : ""}
 
 Rules:
 1. Select the most appropriate widgetId from the supported widget catalog based on the prompt intent

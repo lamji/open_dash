@@ -14,12 +14,22 @@ export interface SaveBlockStylesResponse {
 export interface GenerateAiStyleResponse {
   ok: boolean;
   css?: string;
+  needsClarification?: boolean;
+  clarificationQuestion?: string;
   error?: string;
 }
 
 export interface GenerateAiWidgetUpdateResponse {
   ok: boolean;
   widgetData?: Record<string, unknown>;
+  error?: string;
+}
+
+export interface GenerateAiAssistantResponse {
+  ok: boolean;
+  reply?: string;
+  responseType?: "answer" | "execute_styles" | "execute_data" | "execute_config" | "clarify";
+  recommendedMode?: "styles" | "data" | "config" | "none";
   error?: string;
 }
 
@@ -65,17 +75,23 @@ export async function generateAiStyle(
     title: string;
     widgetData: Record<string, unknown>;
   },
-  mode?: "styles"
+  mode?: "styles",
+  promptContext?: string
 ): Promise<GenerateAiStyleResponse> {
-  console.log(`Debug flow: generateAiStyle fired with`, { blockId, slotIdx, blockType, message, widget, mode });
+  console.log(`Debug flow: generateAiStyle fired with`, { blockId, slotIdx, blockType, message, widget, mode, hasPromptContext: !!promptContext });
   try {
     const res = await fetch("/api/builder/ai-style", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ blockId, slotIdx, blockType, currentCss, message, history, widget, mode }),
+      body: JSON.stringify({ blockId, slotIdx, blockType, currentCss, message, history, widget, mode, promptContext }),
     });
     const data = await res.json();
-    console.log(`Debug flow: generateAiStyle response`, { ok: data.ok, cssLength: data.css?.length });
+    console.log(`Debug flow: generateAiStyle response`, {
+      ok: data.ok,
+      cssLength: data.css?.length,
+      needsClarification: data.needsClarification,
+      hasClarificationQuestion: !!data.clarificationQuestion,
+    });
     return data as GenerateAiStyleResponse;
   } catch (err) {
     console.error(`Debug flow: generateAiStyle error`, err);
@@ -91,20 +107,64 @@ export async function generateAiWidgetUpdate(
   category: string,
   message: string,
   history: GroqChatMessage[],
-  mode?: "data" | "config"
+  mode?: "data" | "config",
+  promptContext?: string
 ): Promise<GenerateAiWidgetUpdateResponse> {
-  console.log(`Debug flow: generateAiWidgetUpdate fired with`, { blockId, slotIdx, widgetId, category, message, mode });
+  console.log(`Debug flow: generateAiWidgetUpdate fired with`, { blockId, slotIdx, widgetId, category, message, mode, hasPromptContext: !!promptContext });
   try {
     const res = await fetch("/api/builder/ai-widget-update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ blockId, slotIdx, currentWidgetData, widgetId, category, message, history, mode }),
+      body: JSON.stringify({ blockId, slotIdx, currentWidgetData, widgetId, category, message, history, mode, promptContext }),
     });
     const data = await res.json();
     console.log(`Debug flow: generateAiWidgetUpdate response`, { ok: data.ok, hasWidgetData: !!data.widgetData });
     return data as GenerateAiWidgetUpdateResponse;
   } catch (err) {
     console.error(`Debug flow: generateAiWidgetUpdate error`, err);
+    return { ok: false, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
+export async function generateAiAssistant(
+  blockId: string,
+  slotIdx: number,
+  blockType: string,
+  currentCss: string,
+  message: string,
+  history: GroqChatMessage[],
+  widget?: {
+    widgetId: string;
+    category: string;
+    title: string;
+    widgetData: Record<string, unknown>;
+  },
+  promptContext?: string
+): Promise<GenerateAiAssistantResponse> {
+  console.log(`Debug flow: generateAiAssistant fired with`, {
+    blockId,
+    slotIdx,
+    blockType,
+    message,
+    hasWidget: !!widget,
+    hasPromptContext: !!promptContext,
+  });
+  try {
+    const res = await fetch("/api/builder/ai-assistant", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blockId, slotIdx, blockType, currentCss, message, history, widget, promptContext }),
+    });
+    const data = await res.json();
+    console.log(`Debug flow: generateAiAssistant response`, {
+      ok: data.ok,
+      replyLength: data.reply?.length,
+      responseType: data.responseType,
+      recommendedMode: data.recommendedMode,
+    });
+    return data as GenerateAiAssistantResponse;
+  } catch (err) {
+    console.error(`Debug flow: generateAiAssistant error`, err);
     return { ok: false, error: err instanceof Error ? err.message : "Unknown error" };
   }
 }

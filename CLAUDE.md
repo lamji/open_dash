@@ -14,6 +14,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Without MCP initialization for these task types, you will miss critical rules and context that govern how to properly implement changes in this codebase.
 
+## ⚠️ MANDATORY: MVVM Audit Before & After Edits
+
+**Before starting ANY code changes and after completing ALL code changes, call the MVVM audit tool:**
+
+```
+mcp__brain__mvvm_audit({ projectRoot: "/home/akrizu/agent-v3/projects/open-dash" })
+```
+
+This tool:
+- Scans ALL .ts/.tsx files for MVVM violations
+- Detects cross-feature/cross-component imports (components must NOT know about each other)
+- Checks: no fetch in presentation UI, no inline types, page.tsx routing-only, domain is pure types
+- Returns a score and list of violations
+
+**If violations are found AFTER your edits, you MUST fix them before completing the task.**
+
+### MVVM Rules (Non-Negotiable)
+- **UI files** (`src/presentation/*/index.tsx`): NO business logic, NO API calls, NO inline types
+- **Logic hooks** (`src/presentation/*/use*.ts`): All state/effects/API calls go here. NO inline types.
+- **Domain types** (`src/domain/*/types.ts`): Pure types/interfaces only. NO React imports.
+- **Route files** (`src/app/**/page.tsx`): ROUTING ONLY — import and render presentation component.
+- **Component isolation**: `src/presentation/featureA/` CANNOT import from `src/presentation/featureB/`. Use `src/components/shared/`, `src/lib/`, or `src/domain/` for shared code.
+
 ## Project Overview
 
 **OpenDash** is an AI-powered admin dashboard platform that lets users build admin dashboards using natural language. It's a multi-tenant SaaS application built with Next.js, React, and TypeScript, featuring a visual builder UI and AI-assisted dashboard generation via Groq LLM.
