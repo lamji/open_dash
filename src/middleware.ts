@@ -24,6 +24,7 @@ const PROTECTED_API_PREFIXES = [
 // Routes exempt from auth (public)
 const PUBLIC_ROUTES = [
   "/",
+  "/login",
   "/auth/login",
   "/signup",
   "/forgot-password",
@@ -32,6 +33,9 @@ const PUBLIC_ROUTES = [
   "/api/widgets",
   "/preview",
 ];
+
+// Public auth-entry routes where logged-in users should go to dashboard
+const AUTH_ENTRY_ROUTES = ["/", "/login", "/auth/login", "/signup"];
 
 function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTES.some(
@@ -49,20 +53,33 @@ function isProtectedApiRoute(pathname: string): boolean {
   return PROTECTED_API_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
+function isAuthEntryRoute(pathname: string): boolean {
+  return AUTH_ENTRY_ROUTES.some((route) => pathname === route);
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   console.log(`Debug flow: middleware fired with`, { pathname });
+
+  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME);
+  const hasSession = !!sessionCookie?.value;
+
+  console.log(`Debug flow: middleware session check`, { pathname, hasSession });
+
+  if (isAuthEntryRoute(pathname) && hasSession) {
+    const dashboardUrl = new URL("/dashboard", request.url);
+    console.log(`Debug flow: middleware redirecting authenticated user from auth-entry route`, {
+      pathname,
+      destination: dashboardUrl.pathname,
+    });
+    return NextResponse.redirect(dashboardUrl);
+  }
 
   // Skip public routes
   if (isPublicRoute(pathname)) {
     console.log(`Debug flow: middleware public route, passing through`, { pathname });
     return NextResponse.next();
   }
-
-  const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME);
-  const hasSession = !!sessionCookie?.value;
-
-  console.log(`Debug flow: middleware session check`, { pathname, hasSession });
 
   // Block unauthenticated access to protected pages
   if (isProtectedPage(pathname) && !hasSession) {

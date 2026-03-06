@@ -684,7 +684,7 @@ function FullNotificationView({ onClose, onNotificationClick }: { onClose: () =>
 export default function AdminShell() {
   const store = useAdminStore();
   const searchParams = useSearchParams();
-  const params = Object.fromEntries(searchParams.entries());
+  const params = Object.fromEntries(searchParams?.entries() ?? []);
   const isPreview = params["preview"] === "true";
   const projectId = params["projectId"] ?? null;
   const chatEndRef = useRef<HTMLDivElement>(null);

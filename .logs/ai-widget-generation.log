@@ -18,3 +18,13 @@
 [2026-03-05T14:36:16.667Z] AI Response from Groq: {"responseText":"{\n  \"widgetId\": \"chart-line\",\n   \"category\": \"charts\",\n   \"title\": \"Sales Report\",\n   \"widgetData\": {\n      \"title\": \"Monthly Sales Trend\",\n      \"xKey\": \"month\",\n      \"lines\": [\n         {\n            \"dataKey\": \"sales\",\n            \"label\": \"Sales\",\n            \"color\": \"#3b82f6\"\n         }\n      ],\n      \"data\": [\n         { \"month\": \"Jan\", \"sales\": 120 },\n         { \"month\": \"Feb\", \"sales\": 140 },\n         { \"month\": \"Mar\", \"sales\": 130 },\n         { \"month\": \"Apr\", \"sales\": 160 },\n         { \"month\": \"May\", \"sales\": 150 },\n         { \"month\": \"Jun\", \"sales\": 170 }\n      ]\n   }\n}"}
 [2026-03-05T14:36:16.667Z] Parsed widget config: {"widget":{"widgetId":"chart-line","category":"charts","title":"Sales Report","widgetData":{"title":"Monthly Sales Trend","xKey":"month","lines":[{"dataKey":"sales","label":"Sales","color":"#3b82f6"}],"data":[{"month":"Jan","sales":120},{"month":"Feb","sales":140},{"month":"Mar","sales":130},{"month":"Apr","sales":160},{"month":"May","sales":150},{"month":"Jun","sales":170}]}}}
 [2026-03-05T14:36:16.667Z] SUCCESS: Widget generated: {"widgetId":"chart-line","category":"charts","title":"Sales Report"}
+[2026-03-06T02:51:01.186Z] POST /api/builder/ai-widget fired
+[2026-03-06T02:51:01.186Z] Received prompt: {"prompt":"create search input with searc icon"}
+[2026-03-06T02:51:01.186Z] AI Response from Groq: {"responseText":"{\n  \"widgetId\": \"search\",\n   \"category\": \"search\",\n   \"title\": \"Search Input\",\n   \"widgetData\": {\n       \"icon\": \"Search\",\n       \"placeholder\": \"Search here...\"\n   }\n}"}
+[2026-03-06T02:51:01.186Z] Parsed widget config: {"widget":{"widgetId":"search","category":"search","title":"Search Input","widgetData":{"icon":"Search","placeholder":"Search here..."}}}
+[2026-03-06T02:51:01.186Z] SUCCESS: Widget generated: {"widgetId":"search","category":"search","title":"Search Input"}
+[2026-03-06T09:56:32.904Z] POST /api/builder/ai-widget fired
+[2026-03-06T09:56:32.904Z] Received prompt: {"prompt":"add button export csv"}
+[2026-03-06T09:56:32.904Z] AI Response from Groq: {"responseText":"{\n  \"widgetId\": \"split-button\",\n   \"category\": \"button\",\n   \"title\": \"Export CSV\",\n   \"widgetData\": {\n       \"label\": \"Export CSV\"\n   }\n}"}
+[2026-03-06T09:56:32.904Z] Parsed widget config: {"widget":{"widgetId":"split-button","category":"button","title":"Export CSV","widgetData":{"label":"Export CSV"}}}
+[2026-03-06T09:56:32.904Z] SUCCESS: Widget generated: {"widgetId":"split-button","category":"button","title":"Export CSV"}

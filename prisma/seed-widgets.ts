@@ -457,6 +457,34 @@ const widgets = [
     category: 'button',
     jsxCode: JSON.stringify({ options: ['List', 'Grid', 'Kanban'], selected: 'List' }),
   },
+  {
+    slug: 'button-left-icon',
+    title: 'Button With Left Icon',
+    description: 'Action button with icon before label',
+    category: 'button',
+    jsxCode: JSON.stringify({ label: 'Create Report', description: 'Button with left icon' }),
+  },
+  {
+    slug: 'button-right-icon',
+    title: 'Button With Right Icon',
+    description: 'Action button with icon after label',
+    category: 'button',
+    jsxCode: JSON.stringify({ label: 'View Details', description: 'Button with right icon' }),
+  },
+  {
+    slug: 'upload-buttons',
+    title: 'Upload Button Variants',
+    description: 'Multiple upload button styles: solid, outline, and dashed',
+    category: 'button',
+    jsxCode: JSON.stringify({ labels: ['Upload file', 'Upload assets', 'Drag and upload'] }),
+  },
+  {
+    slug: 'button-variant-set',
+    title: 'Button Variant Set',
+    description: 'Default, secondary, outline, ghost, link, and destructive button variants',
+    category: 'button',
+    jsxCode: JSON.stringify({ labels: { default: 'Default', secondary: 'Secondary', outline: 'Outline', ghost: 'Ghost', link: 'Link', destructive: 'Destructive' } }),
+  },
 
   // ── DROPDOWN ────────────────────────────────────────────────────
   {

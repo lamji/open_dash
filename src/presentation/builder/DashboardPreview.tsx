@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import {
   LayoutGrid, LayoutDashboard, BarChart3, Blocks,
   Pencil, Loader2, AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { LayoutBlock, LayoutSlot } from "@/domain/builder/types";
 import { WIDGET_PREVIEWS } from "@/presentation/widgets";
 import { useDashboardPreview } from "./useDashboardPreview";
 
@@ -18,6 +20,53 @@ const GRID_CLASS: Record<string, string> = {
 
 interface Props {
   id: string;
+}
+
+function cssStringToStyle(css: string): CSSProperties {
+  console.log(`Debug flow: preview cssStringToStyle fired with`, { cssLength: css.length });
+  const style: Record<string, string> = {};
+  css
+    .split(";")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((decl) => {
+      const idx = decl.indexOf(":");
+      if (idx < 0) return;
+      const prop = decl.slice(0, idx).trim();
+      const val = decl.slice(idx + 1).trim();
+      if (!prop || !val) return;
+      const camel = prop.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+      style[camel] = val;
+    });
+  console.log(`Debug flow: preview cssStringToStyle result`, { keys: Object.keys(style) });
+  return style as CSSProperties;
+}
+
+function getPreviewBlockStyle(block: LayoutBlock): CSSProperties {
+  console.log(`Debug flow: getPreviewBlockStyle fired with`, { blockId: block.id, display: block.layoutDisplay });
+  const gap = block.gap ? `${block.gap}` : undefined;
+  if (block.layoutDisplay === "flex") {
+    return {
+      display: "flex",
+      flexDirection: block.slots.length > 1 ? "row" : "column",
+      gap,
+      justifyContent: block.justifyContent,
+      alignItems: block.alignItems,
+    };
+  }
+  return {
+    gap,
+    alignItems: block.alignItems,
+    ...(block.gridRatio ? { gridTemplateColumns: block.gridRatio } : {}),
+  };
+}
+
+function getPreviewBlockClass(block: LayoutBlock): string {
+  console.log(`Debug flow: getPreviewBlockClass fired with`, { blockId: block.id, display: block.layoutDisplay });
+  if (block.layoutDisplay === "flex") {
+    return "flex";
+  }
+  return `grid ${block.gridRatio ? "" : GRID_CLASS[block.type] ?? "grid-cols-1"}`;
 }
 
 export default function DashboardPreview({ id }: Props) {
@@ -48,6 +97,88 @@ export default function DashboardPreview({ id }: Props) {
       </div>
     );
   }
+
+  const renderPreviewSlot = (
+    block: LayoutBlock,
+    slot: LayoutSlot,
+    slotIdx: number,
+    depth: number,
+    blockStyle: CSSProperties,
+  ) => {
+    console.log(`Debug flow: renderPreviewSlot fired with`, { blockId: block.id, slotIdx, depth, hasWidget: !!slot.widget, childCount: slot.childBlocks?.length ?? 0 });
+    const widget = slot.widget;
+    const childBlocks = slot.childBlocks ?? [];
+    const hasChildren = childBlocks.length > 0;
+    const isNestedSlot = depth > 0;
+    const slotStyle = cssStringToStyle(block.columnStyles?.[slotIdx] ?? "");
+    const slotHasHeightOverride = slotStyle.height !== undefined || slotStyle.minHeight !== undefined;
+    const blockHasHeightOverride = blockStyle.height !== undefined || blockStyle.minHeight !== undefined;
+    const hasHeightConstraint = slotHasHeightOverride || blockHasHeightOverride;
+    const shouldApplyDefaultSlotMinHeight = !isNestedSlot && !slotHasHeightOverride && !blockHasHeightOverride;
+    const slotBaseStyle: CSSProperties = {
+      ...(!isNestedSlot ? { alignSelf: "stretch" } : {}),
+      ...(shouldApplyDefaultSlotMinHeight ? { minHeight: "160px" } : {}),
+      ...(isNestedSlot && !slotHasHeightOverride ? { minHeight: "0px" } : {}),
+      ...(hasChildren
+        ? {
+            display: "flex",
+            flexDirection: "column",
+            ...(hasHeightConstraint ? { overflow: "auto" } : {}),
+          }
+        : {}),
+    };
+    return (
+      <div
+        key={slotIdx}
+        className={`rounded-xl border p-4 ${hasChildren ? "border-slate-300 bg-slate-100" : "border-slate-200 bg-white"}`}
+        style={{ ...slotBaseStyle, ...slotStyle }}
+        data-test-id={`preview-slot-${block.id}-${slotIdx}`}
+      >
+        {widget ? (
+          <div data-test-id={`preview-widget-${block.id}-${slotIdx}`}>
+            {WIDGET_PREVIEWS[widget.widgetId]
+              ? WIDGET_PREVIEWS[widget.widgetId](widget.widgetData)
+              : (
+                <div className="flex items-center justify-center h-full text-slate-400 text-xs" data-test-id={`preview-widget-missing-${block.id}-${slotIdx}`}>
+                  Widget &ldquo;{widget.widgetId}&rdquo; not found
+                </div>
+              )
+            }
+          </div>
+        ) : childBlocks.length === 0 ? (
+          <div className="flex items-center justify-center h-full text-slate-300 text-xs" data-test-id={`preview-slot-empty-${block.id}-${slotIdx}`}>
+            Empty slot
+          </div>
+        ) : null}
+
+        {hasChildren && (
+          <div className={`${widget ? "mt-4" : ""} flex min-h-0 flex-col gap-3 ${hasHeightConstraint ? "h-full" : ""}`} data-test-id={`preview-slot-children-${block.id}-${slotIdx}`}>
+            <div className="rounded-xl bg-slate-200/80 p-3 flex-1 min-h-0">
+              <div className="space-y-3 min-h-0">
+                {childBlocks.map((childBlock) => renderPreviewBlock(childBlock, depth + 1))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderPreviewBlock = (block: LayoutBlock, depth = 0) => {
+    console.log(`Debug flow: renderPreviewBlock fired with`, { blockId: block.id, depth });
+    const blockStyle = cssStringToStyle(block.blockStyles ?? "");
+    return (
+      <div key={block.id} style={blockStyle} data-test-id={`preview-block-wrapper-${block.id}`}>
+        <div
+          className={getPreviewBlockClass(block)}
+          style={getPreviewBlockStyle(block)}
+          data-test-id={`preview-block-${block.id}`}
+        >
+          {block.slots.map((slot, slotIdx) => renderPreviewSlot(block, slot, slotIdx, depth, blockStyle))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50" data-test-id="preview-shell">
@@ -107,39 +238,7 @@ export default function DashboardPreview({ id }: Props) {
             </div>
           ) : (
             <div className="space-y-4 max-w-6xl" data-test-id="preview-blocks">
-              {record.layout.map((block) => (
-                <div
-                  key={block.id}
-                  className={`grid gap-4 ${block.gridRatio ? "" : GRID_CLASS[block.type] ?? "grid-cols-1"}`}
-                  style={block.gridRatio ? { gridTemplateColumns: block.gridRatio } : undefined}
-                  data-test-id={`preview-block-${block.id}`}
-                >
-                  {block.slots.map((widget, slotIdx) => (
-                    <div
-                      key={slotIdx}
-                      className="bg-white rounded-xl border border-slate-200 p-4 min-h-[160px]"
-                      data-test-id={`preview-slot-${block.id}-${slotIdx}`}
-                    >
-                      {widget ? (
-                        <div data-test-id={`preview-widget-${block.id}-${slotIdx}`}>
-                          {WIDGET_PREVIEWS[widget.widgetId]
-                            ? WIDGET_PREVIEWS[widget.widgetId](widget.widgetData)
-                            : (
-                              <div className="flex items-center justify-center h-full text-slate-400 text-xs" data-test-id={`preview-widget-missing-${block.id}-${slotIdx}`}>
-                                Widget &ldquo;{widget.widgetId}&rdquo; not found
-                              </div>
-                            )
-                          }
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center h-full text-slate-300 text-xs" data-test-id={`preview-slot-empty-${block.id}-${slotIdx}`}>
-                          Empty slot
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ))}
+              {record.layout.map((block) => renderPreviewBlock(block))}
             </div>
           )}
         </div>

@@ -25,10 +25,11 @@ import {
 } from "@/components/ui/tabs";
 import { useBuilder, BUILDER_CATEGORIES } from "./useBuilder";
 import { WIDGET_PREVIEWS, WIDGET_CATEGORIES } from "@/presentation/widgets";
-import type { LayoutType, CodeEditorTab } from "@/domain/builder/types";
+import type { LayoutBlock, LayoutSlot, LayoutType, CodeEditorTab } from "@/domain/builder/types";
 import type { WidgetTemplate } from "@/domain/widgets/types";
 import { DASHBOARD_TEMPLATES } from "@/lib/dashboard-templates";
 import { WidgetPickerCard } from "@/components/widgets/widget-picker-card";
+import type { WidgetTemplate as WidgetTemplateWithDates } from "@/presentation/widgets/useWidgets";
 
 const LAYOUT_OPTIONS: { type: LayoutType; label: string; cols: number }[] = [
   { type: "single",  label: "Single Column", cols: 1 },
@@ -160,6 +161,133 @@ const GRID_CLASS: Record<string, string> = {
   "grid-4": "grid-cols-4",
 };
 
+const JUSTIFY_OPTIONS = [
+  { value: "start", label: "Start" },
+  { value: "center", label: "Center" },
+  { value: "end", label: "End" },
+  { value: "between", label: "Space Between" },
+  { value: "around", label: "Space Around" },
+  { value: "evenly", label: "Space Evenly" },
+] as const;
+
+const ALIGN_OPTIONS = [
+  { value: "start", label: "Start" },
+  { value: "center", label: "Center" },
+  { value: "end", label: "End" },
+  { value: "stretch", label: "Stretch" },
+  { value: "baseline", label: "Baseline" },
+] as const;
+
+const COLUMN_CSS_DRAFT_DEFAULT = [
+  "position: relative;",
+  "width: 100%;",
+  "min-height: 300px;",
+  "height: auto;",
+  "background: transparent;",
+  "padding: 0px;",
+  "margin: 0px;",
+  "border-radius: 12px;",
+  "border: none;",
+  "box-shadow: none;",
+  "display: block;",
+  "overflow: visible;",
+].join("\n");
+
+const BLOCK_CSS_DRAFT_DEFAULT = [
+  "background: transparent;",
+  "padding: 0px;",
+  "margin: 0px;",
+  "border-radius: 0px;",
+  "border: none;",
+  "box-shadow: none;",
+  "overflow: visible;",
+].join("\n");
+
+function getCssEditorSeed(isBlockLevel: boolean, css: string): string {
+  console.log(`Debug flow: getCssEditorSeed fired with`, { isBlockLevel, cssLength: css.length });
+  if (css.trim().length > 0) {
+    return css;
+  }
+  return isBlockLevel ? BLOCK_CSS_DRAFT_DEFAULT : COLUMN_CSS_DRAFT_DEFAULT;
+}
+
+function findBlock(blocks: LayoutBlock[], blockId: string): LayoutBlock | null {
+  console.log(`Debug flow: findBlock fired with`, { blockId, blockCount: blocks.length });
+  for (const block of blocks) {
+    if (block.id === blockId) {
+      return block;
+    }
+    for (const slot of block.slots) {
+      const found = findBlock(slot.childBlocks ?? [], blockId);
+      if (found) {
+        return found;
+      }
+    }
+  }
+  return null;
+}
+
+function getBlockContainerStyle(block: LayoutBlock): CSSProperties {
+  console.log(`Debug flow: getBlockContainerStyle fired with`, { blockId: block.id, display: block.layoutDisplay, gap: block.gap });
+  const gap = block.gap ? `${block.gap}` : undefined;
+  if (block.layoutDisplay === "flex") {
+    return {
+      display: "flex",
+      flexDirection: block.slots.length > 1 ? "row" : "column",
+      gap,
+      justifyContent: block.justifyContent,
+      alignItems: block.alignItems,
+    };
+  }
+  return {
+    gap,
+    justifyItems: block.justifyContent === "start" ? "start" : block.justifyContent === "end" ? "end" : undefined,
+    alignItems: block.alignItems,
+    ...(block.gridRatio ? { gridTemplateColumns: "repeat(12, minmax(0, 1fr))" } : {}),
+  };
+}
+
+function parseGridRatioSpans(block: LayoutBlock): number[] {
+  console.log(`Debug flow: parseGridRatioSpans fired with`, { blockId: block.id, gridRatio: block.gridRatio });
+  if (!block.gridRatio) return [];
+  const parts = block.gridRatio
+    .split(" ")
+    .map((part) => Number.parseFloat(part.trim().replace("fr", "")))
+    .filter((part) => Number.isFinite(part) && part > 0);
+  if (parts.length <= block.slots.length) {
+    return parts;
+  }
+  return [...parts.slice(0, Math.max(block.slots.length - 1, 0)), parts[parts.length - 1]];
+}
+
+function getSlotPlacementStyle(block: LayoutBlock, slotIdx: number): CSSProperties {
+  const spans = parseGridRatioSpans(block);
+  console.log(`Debug flow: getSlotPlacementStyle fired with`, { blockId: block.id, slotIdx, spans });
+  if (!block.gridRatio || block.layoutDisplay !== "grid" || spans.length !== block.slots.length) {
+    return {};
+  }
+
+  const span = spans[slotIdx] ?? 1;
+  const totalSpan = spans.reduce((sum, current) => sum + current, 0);
+  const freeColumns = Math.max(12 - totalSpan, 0);
+  const blockOffset =
+    block.justifyContent === "end"
+      ? freeColumns
+      : block.justifyContent === "center"
+        ? Math.floor(freeColumns / 2)
+        : 0;
+  const start = spans.slice(0, slotIdx).reduce((sum, current) => sum + current, 1 + blockOffset);
+  return { gridColumn: `${start} / span ${span}` };
+}
+
+function getBlockContainerClass(block: LayoutBlock): string {
+  console.log(`Debug flow: getBlockContainerClass fired with`, { blockId: block.id, display: block.layoutDisplay });
+  if (block.layoutDisplay === "flex") {
+    return "flex";
+  }
+  return `grid ${block.gridRatio ? "" : GRID_CLASS[block.type] ?? "grid-cols-1"}`;
+}
+
 export default function BuilderShell() {
   const router = useRouter();
   const {
@@ -196,6 +324,7 @@ export default function BuilderShell() {
     togglePreview,
     saveLayout,
     openLayoutPicker,
+    openSlotLayoutPicker,
     closeLayoutPicker,
     addBlock,
     removeBlock,
@@ -213,6 +342,7 @@ export default function BuilderShell() {
     closeCssEditor,
     saveCssStyles,
     saveWidgetDataFromEditor,
+    saveWidgetFunctionFromEditor,
     openGroqChat,
     closeGroqChat,
     sendGroqMessage,
@@ -234,7 +364,16 @@ export default function BuilderShell() {
   const [aiWidgetLoading, setAiWidgetLoading] = useState<string | null>(null);
   const [gridRatioInput, setGridRatioInput] = useState("");
   const [gridRatioError, setGridRatioError] = useState("");
+  const [gridDisplayInput, setGridDisplayInput] = useState<"grid" | "flex">("grid");
+  const [gridJustifyInput, setGridJustifyInput] = useState("start");
+  const [gridAlignInput, setGridAlignInput] = useState("stretch");
+  const [gridGapInput, setGridGapInput] = useState("16px");
+  const [aiPromptModal, setAiPromptModal] = useState<{ blockId: string; slotIdx: number } | null>(null);
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+  const [slashMenuHighlighted, setSlashMenuHighlighted] = useState(0);
+  const [slotWidths, setSlotWidths] = useState<Record<string, number>>({});
   const groqInputRef = useRef<HTMLInputElement>(null);
+  const slotRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   useEffect(() => {
     console.log(`Debug flow: groqChatOpen changed`, { groqChatOpen, groqChatLoading });
@@ -243,10 +382,90 @@ export default function BuilderShell() {
     }
   }, [groqChatOpen, groqChatLoading, groqMessages]);
 
+  useEffect(() => {
+    console.log(`Debug flow: slot width observer effect fired with`, { blockCount: blocks.length });
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      setSlotWidths((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const entry of entries) {
+          const target = entry.target as HTMLElement;
+          const slotKey = target.dataset.slotKey;
+          if (!slotKey) {
+            continue;
+          }
+          const width = Math.round(entry.contentRect.width);
+          if (next[slotKey] !== width) {
+            next[slotKey] = width;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    });
+
+    for (const [slotKey, node] of Object.entries(slotRefs.current)) {
+      if (!node) continue;
+      node.dataset.slotKey = slotKey;
+      observer.observe(node);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [blocks, previewMode]);
+
   const handleAddWidget = (blockId: string, slotIdx: number) => {
     console.log(`Debug flow: handleAddWidget fired with`, { blockId, slotIdx });
     setSelectedSlot({ blockId, slotIdx });
     openWidgetCategoryModal();
+  };
+
+  const openCssEditorWithDraft = (block: LayoutBlock, slotIdx?: number) => {
+    const isBlockLevel = slotIdx === undefined || slotIdx === -1;
+    const editorState = openCssEditor(block.id, slotIdx);
+    if (!editorState) return;
+    const editableSeed = getCssEditorSeed(isBlockLevel, editorState.css ?? "");
+    console.log(`Debug flow: openCssEditorWithDraft fired with`, {
+      blockId: block.id,
+      slotIdx,
+      isBlockLevel,
+      cssLength: editorState.css.length,
+      editableSeedLength: editableSeed.length,
+    });
+    setCssEditorDraft(editableSeed);
+  };
+
+  const handleAddLayout = (blockId: string, slotIdx: number) => {
+    console.log(`Debug flow: handleAddLayout fired with`, { blockId, slotIdx });
+    openSlotLayoutPicker(blockId, slotIdx);
+  };
+
+  const handleOpenGridRatioModal = (block: LayoutBlock) => {
+    console.log(`Debug flow: handleOpenGridRatioModal fired with`, { blockId: block.id });
+    const editableRatio = (() => {
+      if (!block.gridRatio) return "";
+      const parts = block.gridRatio
+        .split(" ")
+        .map((part) => part.trim().replace("fr", ""))
+        .filter((part) => part.length > 0);
+      if (parts.length <= block.slots.length) {
+        return parts.join("/");
+      }
+      const normalizedParts = [...parts.slice(0, Math.max(block.slots.length - 1, 0)), parts[parts.length - 1]];
+      return normalizedParts.join("/");
+    })();
+    setGridRatioInput(editableRatio);
+    setGridDisplayInput(block.layoutDisplay ?? "grid");
+    setGridJustifyInput(block.justifyContent ?? "start");
+    setGridAlignInput(block.alignItems ?? "stretch");
+    setGridGapInput(block.gap ?? "16px");
+    setGridRatioError("");
+    openGridRatioModal(block.id);
   };
 
   const handleGenerateAiWidget = async (blockId: string, slotIdx: number) => {
@@ -284,6 +503,267 @@ export default function BuilderShell() {
       setNavItemLabel("");
       closeNavItemModal();
     }
+  };
+
+  const renderSlotContent = (
+    block: LayoutBlock,
+    slot: LayoutSlot,
+    slotIdx: number,
+    depth: number,
+    blockStyle: CSSProperties,
+  ) => {
+    console.log(`Debug flow: renderSlotContent fired with`, { blockId: block.id, slotIdx, depth, hasWidget: !!slot.widget, childCount: slot.childBlocks?.length ?? 0 });
+    const widget = slot.widget;
+    const childBlocks = slot.childBlocks ?? [];
+    const rawSlotCss = block.columnStyles?.[slotIdx];
+    const slotStyle = cssStringToStyle(rawSlotCss ?? "");
+    const slotPlacementStyle = getSlotPlacementStyle(block, slotIdx);
+    const hasCustomStyle = Object.keys(slotStyle).length > 0;
+    const hasChildren = childBlocks.length > 0;
+    const slotKey = `${block.id}-${slotIdx}`;
+    const measuredSlotWidth = slotWidths[slotKey] ?? 9999;
+    const isNestedSlot = depth > 0;
+    const isCompactSlot = measuredSlotWidth <= 240 || (isNestedSlot && measuredSlotWidth <= 300);
+    const hasExplicitSlotStyleEntry =
+      Array.isArray(block.columnStyles) &&
+      Object.prototype.hasOwnProperty.call(block.columnStyles, slotIdx);
+    const slotHasHeightOverride = slotStyle.height !== undefined || slotStyle.minHeight !== undefined;
+    const blockHasHeightOverride = blockStyle.height !== undefined || blockStyle.minHeight !== undefined;
+    const hasHeightConstraint = slotHasHeightOverride || blockHasHeightOverride;
+    const shouldApplyDefaultSlotMinHeight =
+      !isNestedSlot &&
+      !hasExplicitSlotStyleEntry &&
+      !blockHasHeightOverride &&
+      !slotHasHeightOverride;
+    const slotBaseStyle: CSSProperties = {
+      ...(!isNestedSlot ? { alignSelf: "stretch" } : {}),
+      ...(shouldApplyDefaultSlotMinHeight ? { minHeight: "300px" } : {}),
+      ...(isNestedSlot && !slotHasHeightOverride ? { minHeight: "0px" } : {}),
+      ...(hasChildren
+        ? {
+            display: "flex",
+            flexDirection: "column",
+            ...(hasHeightConstraint ? { overflow: "auto" } : {}),
+          }
+        : {}),
+    };
+
+    return (
+      <div
+        key={slotIdx}
+        ref={(node) => {
+          if (node) {
+            slotRefs.current[slotKey] = node;
+          } else {
+            delete slotRefs.current[slotKey];
+          }
+        }}
+        className={`relative w-full min-w-0 rounded-xl ${!hasCustomStyle && !widget && !hasChildren ? "bg-[#ECECEC]" : ""} ${hasChildren ? "p-3" : ""}`}
+        style={{ ...slotBaseStyle, ...slotStyle, ...slotPlacementStyle }}
+        data-test-id={`builder-slot-${block.id}-${slotIdx}`}
+      >
+        {!previewMode && !widget && !hasChildren && !isCompactSlot && (
+          <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
+            <button
+              onClick={(e) => { e.stopPropagation(); openGroqChat(block.id, slotIdx); }}
+              className="text-slate-400 hover:text-purple-500 bg-white/80 backdrop-blur-sm rounded p-1 shadow-sm transition-colors"
+              title="Ask AI to style this column"
+              data-test-id={`builder-empty-slot-ai-style-${block.id}-${slotIdx}`}
+            >
+              <Sparkles className="w-3 h-3" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); openCssEditorWithDraft(block, slotIdx); }}
+              className="text-slate-400 hover:text-blue-500 bg-white/80 backdrop-blur-sm rounded p-1 shadow-sm transition-colors"
+              title="Edit column styles"
+              data-test-id={`builder-empty-slot-edit-${block.id}-${slotIdx}`}
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
+        {widget && (
+          <div className="flex flex-col h-full" data-test-id={`builder-slot-filled-${block.id}-${slotIdx}`}>
+            {!previewMode && (
+              <div className={`flex mb-2 flex-shrink-0 ${isCompactSlot ? "items-center justify-end" : "items-center justify-between"}`} data-test-id={`builder-slot-header-${block.id}-${slotIdx}`}>
+                {!isCompactSlot && <span className="text-xs font-semibold text-slate-500 truncate">{widget.title}</span>}
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => openGroqChat(block.id, slotIdx)}
+                    className="text-slate-400 hover:text-purple-500 flex-shrink-0"
+                    title="Ask AI to style this slot"
+                    data-test-id={`builder-slot-ai-${block.id}-${slotIdx}`}
+                  >
+                    <Sparkles className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => { openCssEditorWithDraft(block, slotIdx); }}
+                    className="text-slate-400 hover:text-blue-500 flex-shrink-0"
+                    title="Edit slot styles"
+                    data-test-id={`builder-slot-edit-${block.id}-${slotIdx}`}
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => removeWidget(block.id, slotIdx)}
+                    className="text-slate-400 hover:text-red-500 flex-shrink-0 ml-1"
+                    data-test-id={`builder-slot-clear-${block.id}-${slotIdx}`}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="w-full flex-1 min-h-0 min-w-0 overflow-hidden" data-test-id={`builder-slot-widget-${block.id}-${slotIdx}`}>
+              <div className="min-w-0 h-full">
+                {WIDGET_PREVIEWS[widget.widgetId]
+                  ? WIDGET_PREVIEWS[widget.widgetId](widget.widgetData)
+                  : <span className="text-slate-400 text-xs">No preview</span>
+                }
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!widget && !hasChildren && !previewMode && (
+          <div className={`flex h-full w-full items-center justify-center ${shouldApplyDefaultSlotMinHeight ? "min-h-[200px]" : "min-h-0"}`}>
+            <div className={`flex w-full px-2 py-2 ${isCompactSlot ? "flex-col items-stretch gap-1.5" : "max-w-[420px] flex-wrap items-center justify-center gap-2"}`}>
+              <button
+                onClick={() => handleAddWidget(block.id, slotIdx)}
+                className={`inline-flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 rounded-xl hover:border-blue-400 hover:bg-blue-50/50 transition-all group ${isCompactSlot ? "w-full px-2 py-1.5" : "px-4 py-2 whitespace-nowrap"}`}
+                data-test-id={`builder-slot-add-widget-${block.id}-${slotIdx}`}
+              >
+                <div className={`${isCompactSlot ? "w-5 h-5" : "w-6 h-6"} bg-slate-100 group-hover:bg-blue-100 rounded-md flex items-center justify-center transition-colors`}>
+                  <Plus className={`${isCompactSlot ? "w-3 h-3" : "w-3.5 h-3.5"} text-slate-400 group-hover:text-blue-500`} />
+                </div>
+                <span className={`${isCompactSlot ? "text-[11px]" : "text-xs"} font-medium text-slate-500 group-hover:text-blue-600`}>Add Widget</span>
+              </button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => handleAddLayout(block.id, slotIdx)}
+                className={`${isCompactSlot ? "h-8 w-full px-2 text-[11px]" : "h-9 px-3 text-xs whitespace-nowrap"} text-slate-500 hover:text-blue-600`}
+                data-test-id={`builder-slot-add-layout-${block.id}-${slotIdx}`}
+              >
+                Add layout
+              </Button>
+
+              <Button
+                size="icon"
+                className={`${isCompactSlot ? "h-8 w-8 self-center" : "h-9 w-9"} rounded-full border border-[var(--primary)]/20 bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm transition-colors hover:bg-[var(--primary)]/90 flex-shrink-0`}
+                onClick={() => setAiPromptModal({ blockId: block.id, slotIdx })}
+                data-test-id={`builder-slot-ai-open-${block.id}-${slotIdx}`}
+              >
+                <Sparkles className="w-4 h-4" />
+              </Button>
+              {isCompactSlot && (
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 self-center"
+                  onClick={() => openCssEditorWithDraft(block, slotIdx)}
+                  data-test-id={`builder-slot-edit-compact-${block.id}-${slotIdx}`}
+                >
+                  <Pencil className="w-3 h-3" />
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {hasChildren && (
+          <div className={`${widget ? "mt-4" : "mt-0"} flex min-h-0 flex-col gap-3 ${hasHeightConstraint ? "h-full" : ""}`} data-test-id={`builder-slot-children-${block.id}-${slotIdx}`}>
+            {!previewMode && (
+              <div className={`flex items-center ${isCompactSlot ? "flex-col gap-2 items-start" : "justify-between"}`}>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Nested layout</p>
+                  <p className="text-xs text-slate-500">Child columns stay inside this parent wrapper.</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleAddLayout(block.id, slotIdx)}
+                  className={isCompactSlot ? "w-full" : ""}
+                  data-test-id={`builder-slot-add-layout-inline-${block.id}-${slotIdx}`}
+                >
+                  Add layout
+                </Button>
+              </div>
+            )}
+            <div className="rounded-xl p-3 flex-1 min-h-0">
+              <div className="space-y-3 min-h-0">
+                {childBlocks.map((childBlock) => renderBlock(childBlock, depth + 1))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderBlock = (block: LayoutBlock, depth = 0) => {
+    console.log(`Debug flow: renderBlock fired with`, { blockId: block.id, depth, slotCount: block.slots.length });
+    const blockStyle = cssStringToStyle(block.blockStyles ?? "");
+    return (
+      <div
+        key={block.id}
+        className=""
+        style={blockStyle}
+        data-test-id={`builder-block-${block.id}`}
+      >
+        {!previewMode && (
+          <div className={`flex items-center justify-between px-4 py-2 border-b border-slate-200 ${depth > 0 ? "bg-slate-100" : "bg-slate-50"}`} data-test-id={`builder-block-header-${block.id}`}>
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              {depth > 0 ? "Nested" : ""}
+              {depth > 0 ? " " : ""}
+              {LAYOUT_OPTIONS.find((layout) => layout.type === block.type)?.label ?? block.type}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => openGroqChat(block.id, -1)}
+                className="text-slate-400 hover:text-purple-500 transition-colors"
+                title="Ask AI to style this block"
+                data-test-id={`builder-block-ai-${block.id}`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => { openCssEditorWithDraft(block); }}
+                className="text-slate-400 hover:text-blue-500 transition-colors"
+                title="Edit block styles"
+                data-test-id={`builder-block-edit-${block.id}`}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+              {block.slots.length > 1 && (
+                <button
+                  onClick={() => handleOpenGridRatioModal(block)}
+                  className="text-slate-400 hover:text-green-500 transition-colors"
+                  title="Set column ratio"
+                  data-test-id={`builder-block-ratio-${block.id}`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <button
+                onClick={() => removeBlock(block.id)}
+                className="text-slate-400 hover:text-red-500 transition-colors"
+                data-test-id={`builder-block-delete-${block.id}`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+        <div className={`${getBlockContainerClass(block)} mt-0`} style={getBlockContainerStyle(block)} data-test-id={`builder-block-grid-${block.id}`}>
+          {block.slots.map((slot, slotIdx) => renderSlotContent(block, slot, slotIdx, depth, blockStyle))}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -401,197 +881,8 @@ export default function BuilderShell() {
             </div>
           )}
 
-          <div className="space-y-4 w-full" data-test-id="builder-blocks">
-            {blocks.map((block) => {
-              console.log(`[builder-render] block`, { id: block.id, type: block.type, slotCount: block.slots.length, populatedSlots: block.slots.filter(s => s !== null).length });
-              fetch("/api/logs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ level: "debug", category: "builder-render", message: `RENDER_BLOCK`, metadata: { blockId: block.id, blockType: block.type, slotCount: block.slots.length, slots: block.slots.map((s, i) => ({ idx: i, isNull: s === null, widgetId: s?.widgetId ?? null, hasPreview: s ? !!WIDGET_PREVIEWS[s.widgetId] : false })) } }) }).catch(() => {});
-              return (
-              <div
-                key={block.id}
-                className=""
-                style={cssStringToStyle(block.blockStyles ?? "")}
-                data-test-id={`builder-block-${block.id}`}
-              >
-                {!previewMode && (
-                  <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-b border-slate-200" data-test-id={`builder-block-header-${block.id}`}>
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      {LAYOUT_OPTIONS.find(l => l.type === block.type)?.label ?? block.type}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => {
-                          console.log("🔍 debug-log-block-ai", { blockId: block.id, blockType: block.type });
-                          openGroqChat(block.id, 0);
-                        }}
-                        className="text-slate-400 hover:text-purple-500 transition-colors"
-                        title="Ask AI to style this block"
-                        data-test-id={`builder-block-ai-${block.id}`}
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => { openCssEditor(block.id); setCssEditorDraft(block.blockStyles ?? ""); }}
-                        className="text-slate-400 hover:text-blue-500 transition-colors"
-                        title="Edit block styles"
-                        data-test-id={`builder-block-edit-${block.id}`}
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      {block.slots.length > 1 && (
-                        <button
-                          onClick={() => openGridRatioModal(block.id)}
-                          className="text-slate-400 hover:text-green-500 transition-colors"
-                          title="Set column ratio"
-                          data-test-id={`builder-block-ratio-${block.id}`}
-                        >
-                          <LayoutGrid className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => removeBlock(block.id)}
-                        className="text-slate-400 hover:text-red-500 transition-colors"
-                        data-test-id={`builder-block-delete-${block.id}`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-                <div className={`grid gap-4 ${block.gridRatio ? "" : GRID_CLASS[block.type] ?? "grid-cols-1"}`} style={block.gridRatio ? { gridTemplateColumns: block.gridRatio } : undefined} data-test-id={`builder-block-grid-${block.id}`}>
-                  {block.slots.map((widget, slotIdx) => {
-                    const slotStyle = cssStringToStyle(block.columnStyles?.[slotIdx] ?? "");
-                    const hasCustomStyle = Object.keys(slotStyle).length > 0;
-                    return (
-                      <div
-                        key={slotIdx}
-                        className={`relative w-full min-h-[300px] ${widget ? (!hasCustomStyle ? "bg-white rounded-xl shadow-sm border border-slate-200 p-5" : "rounded-xl") : ""} ${!hasCustomStyle && !widget ? "bg-[#ECECEC] rounded-xl" : ""}`}
-                        style={slotStyle}
-                        data-test-id={`builder-slot-${block.id}-${slotIdx}`}
-                      >
-                        {widget ? (
-                          <div className="flex flex-col h-full" data-test-id={`builder-slot-filled-${block.id}-${slotIdx}`}>
-                            {!previewMode && (
-                              <div className="flex items-center justify-between mb-2 flex-shrink-0" data-test-id={`builder-slot-header-${block.id}-${slotIdx}`}>
-                                <span className="text-xs font-semibold text-slate-500 truncate">{widget.title}</span>
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    onClick={() => {
-                                      console.log("🔍 debug-log-jsx", {
-                                        blockId: block.id,
-                                        slotIdx,
-                                        widget: {
-                                          widgetId: widget.widgetId,
-                                          category: widget.category,
-                                          title: widget.title,
-                                          widgetData: widget.widgetData,
-                                        },
-                                        renderedJSX: WIDGET_PREVIEWS[widget.widgetId] 
-                                          ? WIDGET_PREVIEWS[widget.widgetId](widget.widgetData)
-                                          : null,
-                                      });
-                                      openGroqChat(block.id, slotIdx);
-                                    }}
-                                    className="text-slate-400 hover:text-purple-500 flex-shrink-0"
-                                    title="Ask AI to style this slot"
-                                    data-test-id={`builder-slot-ai-${block.id}-${slotIdx}`}
-                                  >
-                                    <Sparkles className="w-3 h-3" />
-                                  </button>
-                                  <button
-                                    onClick={() => { openCssEditor(block.id, slotIdx); setCssEditorDraft(block.columnStyles?.[slotIdx] ?? ""); }}
-                                    className="text-slate-400 hover:text-blue-500 flex-shrink-0"
-                                    title="Edit slot styles"
-                                    data-test-id={`builder-slot-edit-${block.id}-${slotIdx}`}
-                                  >
-                                    <Pencil className="w-3 h-3" />
-                                  </button>
-                                  <button
-                                    onClick={() => removeWidget(block.id, slotIdx)}
-                                    className="text-slate-400 hover:text-red-500 flex-shrink-0 ml-1"
-                                    data-test-id={`builder-slot-clear-${block.id}-${slotIdx}`}
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                            <div className="w-full flex-1 min-h-0" data-test-id={`builder-slot-widget-${block.id}-${slotIdx}`}>
-                              {WIDGET_PREVIEWS[widget.widgetId]
-                                ? WIDGET_PREVIEWS[widget.widgetId](widget.widgetData)
-                                : <span className="text-slate-400 text-xs">No preview</span>
-                              }
-                            </div>
-                          </div>
-                        ) : (
-                          !previewMode && (
-                            <>
-                              {/* Top-right style/edit buttons */}
-                              <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); openGroqChat(block.id, slotIdx); }}
-                                  className="text-slate-400 hover:text-purple-500 bg-white/80 backdrop-blur-sm rounded p-1 shadow-sm transition-colors"
-                                  title="Ask AI to style this column"
-                                  data-test-id={`builder-empty-slot-ai-style-${block.id}-${slotIdx}`}
-                                >
-                                  <Sparkles className="w-3 h-3" />
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); openCssEditor(block.id, slotIdx); setCssEditorDraft(block.columnStyles?.[slotIdx] ?? ""); }}
-                                  className="text-slate-400 hover:text-blue-500 bg-white/80 backdrop-blur-sm rounded p-1 shadow-sm transition-colors"
-                                  title="Edit column styles"
-                                  data-test-id={`builder-empty-slot-edit-${block.id}-${slotIdx}`}
-                                >
-                                  <Pencil className="w-3 h-3" />
-                                </button>
-                              </div>
-
-                              {/* Centered Add Widget + AI prompt */}
-                              <div className="flex flex-col items-center justify-center h-full min-h-[200px] gap-3">
-                                <button
-                                  onClick={() => handleAddWidget(block.id, slotIdx)}
-                                  className="flex flex-col items-center gap-2 px-6 py-4 border-2 border-dashed border-slate-300 rounded-xl hover:border-blue-400 hover:bg-blue-50/50 transition-all group"
-                                  data-test-id={`builder-slot-add-widget-${block.id}-${slotIdx}`}
-                                >
-                                  <div className="w-10 h-10 bg-slate-100 group-hover:bg-blue-100 rounded-lg flex items-center justify-center transition-colors">
-                                    <Plus className="w-5 h-5 text-slate-400 group-hover:text-blue-500" />
-                                  </div>
-                                  <span className="text-xs font-medium text-slate-400 group-hover:text-blue-600">Add Widget</span>
-                                </button>
-
-                                <div className="flex items-center gap-1.5 w-full max-w-[280px]">
-                                  <div className="flex-1 relative">
-                                    <Input
-                                      value={aiWidgetPrompts[`${block.id}-${slotIdx}`] ?? ""}
-                                      onChange={(e) => setAiWidgetPrompts((prev) => ({ ...prev, [`${block.id}-${slotIdx}`]: e.target.value }))}
-                                      onKeyDown={(e) => { if (e.key === "Enter") handleGenerateAiWidget(block.id, slotIdx); }}
-                                      placeholder="Describe a widget…"
-                                      className="text-xs h-8 pr-8"
-                                      disabled={aiWidgetLoading === `${block.id}-${slotIdx}`}
-                                      data-test-id={`builder-slot-ai-prompt-${block.id}-${slotIdx}`}
-                                    />
-                                  </div>
-                                  <Button
-                                    size="sm"
-                                    className="h-8 w-8 p-0 bg-purple-600 hover:bg-purple-700 flex-shrink-0"
-                                    disabled={!aiWidgetPrompts[`${block.id}-${slotIdx}`]?.trim() || aiWidgetLoading === `${block.id}-${slotIdx}`}
-                                    onClick={() => handleGenerateAiWidget(block.id, slotIdx)}
-                                    data-test-id={`builder-slot-ai-send-${block.id}-${slotIdx}`}
-                                  >
-                                    {aiWidgetLoading === `${block.id}-${slotIdx}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                                  </Button>
-                                </div>
-                                <p className="text-[10px] text-slate-400">or create with AI prompt</p>
-                              </div>
-                            </>
-                          )
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-            })}
+          <div className="space-y-4 w-full px-6 py-6" data-test-id="builder-blocks">
+            {blocks.map((block) => renderBlock(block))}
           </div>
 
           {blocks.length > 0 && !previewMode && (
@@ -667,6 +958,38 @@ export default function BuilderShell() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={!!aiPromptModal} onOpenChange={(o) => { if (!o) setAiPromptModal(null); }}>
+        <DialogContent className="max-w-md border-[var(--border)] bg-[var(--card)] text-[var(--card-foreground)]">
+          <DialogHeader>
+            <DialogTitle>Create with AI</DialogTitle>
+          </DialogHeader>
+          {aiPromptModal && (
+            <div className="space-y-3">
+              <Input
+                value={aiWidgetPrompts[`${aiPromptModal.blockId}-${aiPromptModal.slotIdx}`] ?? ""}
+                onChange={(e) => setAiWidgetPrompts((prev) => ({ ...prev, [`${aiPromptModal.blockId}-${aiPromptModal.slotIdx}`]: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === "Enter") { handleGenerateAiWidget(aiPromptModal.blockId, aiPromptModal.slotIdx); setAiPromptModal(null); } }}
+                placeholder="Describe a widget…"
+                className="border-[var(--border)] bg-[var(--muted)] text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]"
+                disabled={aiWidgetLoading === `${aiPromptModal.blockId}-${aiPromptModal.slotIdx}`}
+                data-test-id={`builder-ai-modal-input-${aiPromptModal.blockId}-${aiPromptModal.slotIdx}`}
+              />
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setAiPromptModal(null)} data-test-id="builder-ai-modal-cancel">Cancel</Button>
+                <Button
+                  size="sm"
+                  className="bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary)]/90"
+                  disabled={!aiWidgetPrompts[`${aiPromptModal.blockId}-${aiPromptModal.slotIdx}`]?.trim() || aiWidgetLoading === `${aiPromptModal.blockId}-${aiPromptModal.slotIdx}`}
+                  onClick={() => { handleGenerateAiWidget(aiPromptModal.blockId, aiPromptModal.slotIdx); setAiPromptModal(null); }}
+                  data-test-id="builder-ai-modal-send"
+                >
+                  {aiWidgetLoading === `${aiPromptModal.blockId}-${aiPromptModal.slotIdx}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       {/* ── Modal: Widget Variant Picker ── */}
       <Dialog open={!!showWidgetVariantPicker} onOpenChange={closeWidgetVariantPicker}>
         <DialogContent className="flex h-[calc(100vh-2rem)] min-w-[calc(100vw-2rem)] flex-col gap-0 p-0 bg-white overflow-hidden" data-test-id="builder-variant-picker-modal">
@@ -687,10 +1010,9 @@ export default function BuilderShell() {
               </div>
             ) : (
               <div className="p-6" data-test-id="builder-variant-grid">
-                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                 <WidgetPickerCard
-                  templates={variantTemplates as any}
-                  onSelect={(template: any) => {
+                  templates={variantTemplates as unknown as WidgetTemplateWithDates[]}
+                  onSelect={(template: WidgetTemplateWithDates) => {
                     if (showWidgetVariantPicker) {
                       placeWidget(showWidgetVariantPicker.blockId, showWidgetVariantPicker.slotIdx, {
                         slug: template.slug,
@@ -846,7 +1168,14 @@ export default function BuilderShell() {
                 <span className="text-[10px] text-slate-500 font-mono">CSS • Plain declarations only (no selectors)</span>
                 <div className="flex items-center gap-2">
                   <Button size="sm" variant="ghost" onClick={closeCssEditor} className="text-slate-400" data-test-id="builder-css-editor-cancel-btn">Cancel</Button>
-                  <Button size="sm" onClick={() => { saveCssStyles(cssEditorDraft); }} className="bg-blue-600 hover:bg-blue-700 text-white" data-test-id="builder-css-editor-save-btn">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      saveCssStyles(cssEditorDraft);
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                    data-test-id="builder-css-editor-save-btn"
+                  >
                     <Save className="w-3.5 h-3.5 mr-1" /> Save styles
                   </Button>
                 </div>
@@ -876,7 +1205,7 @@ export default function BuilderShell() {
                   <Button
                     size="sm"
                     onClick={async () => {
-                      const err = await saveWidgetDataFromEditor(dataEditorDraft, "");
+                      const err = await saveWidgetDataFromEditor(dataEditorDraft);
                       if (err) { setDataJsonError(err); } else { closeCssEditor(); }
                     }}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -906,7 +1235,7 @@ export default function BuilderShell() {
                   <Button
                     size="sm"
                     onClick={async () => {
-                      const err = await saveWidgetDataFromEditor(dataEditorDraft, functionEditorDraft);
+                      const err = await saveWidgetFunctionFromEditor(functionEditorDraft);
                       if (err) { setDataJsonError(err); } else { closeCssEditor(); }
                     }}
                     className="bg-amber-600 hover:bg-amber-700 text-white"
@@ -930,6 +1259,10 @@ export default function BuilderShell() {
             closeGridRatioModal();
             setGridRatioInput("");
             setGridRatioError("");
+            setGridDisplayInput("grid");
+            setGridJustifyInput("start");
+            setGridAlignInput("stretch");
+            setGridGapInput("16px");
           }
         }}
       >
@@ -938,13 +1271,14 @@ export default function BuilderShell() {
             <DialogTitle>Custom Column Ratio</DialogTitle>
           </DialogHeader>
           {(() => {
-            const block = gridRatioModal && blocks.find(b => b.id === gridRatioModal.blockId);
+            const block = gridRatioModal ? findBlock(blocks, gridRatioModal.blockId) : null;
             const columnCount = block?.slots.length ?? 2;
             const exampleInput = columnCount === 2 ? "2/8" : columnCount === 3 ? "5/2/5" : "4/4/2/2";
 
             const handleApply = () => {
+              console.log(`Debug flow: handleApply grid ratio fired with`, { gridRatioInput, columnCount });
               setGridRatioError("");
-              const parts = gridRatioInput.trim().split("/").filter(p => p.trim());
+              const parts = gridRatioInput.trim().split("/").filter((part) => part.trim());
 
               if (parts.length !== columnCount) {
                 setGridRatioError(`Enter ${columnCount} numbers separated by "/" (e.g., ${exampleInput})`);
@@ -963,8 +1297,21 @@ export default function BuilderShell() {
                 return;
               }
 
-              const frValue = numbers.map(n => `${n}fr`).join(" ");
-              gridRatioModal && saveGridRatio(gridRatioModal.blockId, frValue);
+              const normalizedGap = (() => {
+                const trimmedGap = gridGapInput.trim();
+                if (!trimmedGap) return "16px";
+                return /^\d+(\.\d+)?$/.test(trimmedGap) ? `${trimmedGap}px` : trimmedGap;
+              })();
+              const frValue = numbers.map((n) => `${n}fr`).join(" ");
+              if (gridRatioModal) {
+                saveGridRatio(gridRatioModal.blockId, {
+                  ratio: frValue,
+                  display: gridDisplayInput,
+                  justifyContent: gridJustifyInput,
+                  alignItems: gridAlignInput,
+                  gap: normalizedGap,
+                });
+              }
               setGridRatioInput("");
               setGridRatioError("");
             };
@@ -983,12 +1330,63 @@ export default function BuilderShell() {
                   />
                 </div>
 
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-2">Display</label>
+                    <select
+                      value={gridDisplayInput}
+                      onChange={(e) => setGridDisplayInput(e.target.value as "grid" | "flex")}
+                      className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                      data-test-id="builder-grid-display-input"
+                    >
+                      <option value="grid">Grid</option>
+                      <option value="flex">Flex</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-2">Gap</label>
+                    <Input
+                      value={gridGapInput}
+                      onChange={(e) => setGridGapInput(e.target.value)}
+                      placeholder="16px"
+                      className="text-sm"
+                      data-test-id="builder-grid-gap-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-2">Justify</label>
+                    <select
+                      value={gridJustifyInput}
+                      onChange={(e) => setGridJustifyInput(e.target.value)}
+                      className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                      data-test-id="builder-grid-justify-input"
+                    >
+                      {JUSTIFY_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-700 block mb-2">Align</label>
+                    <select
+                      value={gridAlignInput}
+                      onChange={(e) => setGridAlignInput(e.target.value)}
+                      className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                      data-test-id="builder-grid-align-input"
+                    >
+                      {ALIGN_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
                 <div className="bg-slate-50 rounded-lg p-3 space-y-1.5">
                   <p className="text-xs font-semibold text-slate-700">Instructions:</p>
                   <ul className="text-xs text-slate-600 space-y-1 list-disc list-inside">
                     <li>Enter numbers separated by &quot;/&quot; (e.g., <span className="font-mono font-semibold text-slate-700">{exampleInput}</span>)</li>
                     <li>Each number represents column width proportionally</li>
-                    <li>Tip: Use numbers that sum to 12 for easier calculation</li>
+                    <li>Choose grid or flex, then fine-tune justify, align, and gap</li>
                     <li>Max total value: 12</li>
                   </ul>
                 </div>
@@ -996,8 +1394,8 @@ export default function BuilderShell() {
                 {gridRatioError && <div className="text-xs text-red-600 font-medium">{gridRatioError}</div>}
 
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={closeGridRatioModal} className="flex-1">Cancel</Button>
-                  <Button size="sm" onClick={handleApply} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white">Apply</Button>
+                  <Button size="sm" variant="outline" onClick={closeGridRatioModal} className="flex-1" data-test-id="builder-grid-modal-cancel">Cancel</Button>
+                  <Button size="sm" onClick={handleApply} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" data-test-id="builder-grid-modal-apply">Apply</Button>
                 </div>
               </div>
             );
@@ -1017,7 +1415,9 @@ export default function BuilderShell() {
               <div>
                 <p className="text-sm font-semibold">AI Style Assistant</p>
                 {groqChatContext && (
-                  <p className="text-[10px] opacity-80">{groqChatContext.blockType} · col {groqChatContext.slotIdx + 1}</p>
+                  <p className="text-[10px] opacity-80">
+                    {groqChatContext.blockType} · {groqChatContext.slotIdx < 0 ? "wrapper" : `col ${groqChatContext.slotIdx + 1}`}
+                  </p>
                 )}
               </div>
             </div>
@@ -1065,22 +1465,61 @@ export default function BuilderShell() {
             )}
           </div>
 
-          <div className="flex items-center gap-2 px-3 py-3 border-t border-slate-200">
+          <div className="flex items-center gap-2 px-3 py-3 border-t border-slate-200 relative">
             <Input
               ref={groqInputRef}
               value={groqInput}
-              onChange={(e) => setGroqInput(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setGroqInput(val);
+                if (val === "/" ) {
+                  setSlashMenuOpen(true);
+                  setSlashMenuHighlighted(0);
+                } else if (!val.startsWith("/") || val.includes(" ")) {
+                  setSlashMenuOpen(false);
+                }
+              }}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && groqInput.trim()) {
+                if (slashMenuOpen) {
+                  if (e.key === "ArrowUp") { e.preventDefault(); setSlashMenuHighlighted((prev) => (prev > 0 ? prev - 1 : 2)); }
+                  else if (e.key === "ArrowDown") { e.preventDefault(); setSlashMenuHighlighted((prev) => (prev < 2 ? prev + 1 : 0)); }
+                  else if (e.key === "Enter") {
+                    const commands = ["/styles ", "/data ", "/config "];
+                    setGroqInput(commands[slashMenuHighlighted]);
+                    setSlashMenuOpen(false);
+                    e.preventDefault();
+                  }
+                  else if (e.key === "Escape") { setSlashMenuOpen(false); }
+                } else if (e.key === "Enter" && !e.shiftKey && groqInput.trim()) {
                   sendGroqMessage(groqInput);
                   setGroqInput("");
                 }
               }}
-              placeholder="e.g. add background red"
+              placeholder="e.g. /styles make it bold / /data update chart"
               className="flex-1 text-xs h-8"
               data-test-id="builder-ai-chat-input"
               autoFocus
             />
+
+            {/* Slash menu dropdown */}
+            {slashMenuOpen && (
+              <div className="absolute bottom-10 left-3 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-48">
+                {[
+                  { label: "/styles", desc: "CSS styling & layout" },
+                  { label: "/data", desc: "Update widget data" },
+                  { label: "/config", desc: "Table & widget config" },
+                ].map((cmd, idx) => (
+                  <button
+                    key={cmd.label}
+                    onClick={() => { setGroqInput(cmd.label + " "); setSlashMenuOpen(false); }}
+                    className={`w-full text-left px-3 py-2 text-xs transition-colors ${idx === slashMenuHighlighted ? "bg-blue-50 text-blue-700 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
+                  >
+                    <span className="font-mono font-bold">{cmd.label}</span>
+                    <span className="text-slate-500 ml-2">{cmd.desc}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             <Button
               size="sm"
               className="h-8 w-8 p-0 bg-purple-600 hover:bg-purple-700"

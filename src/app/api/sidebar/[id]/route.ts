@@ -1,6 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getProjectContext, isErrorResponse } from "@/lib/project-auth";
+import { setCache } from "@/lib/cache";
+import { emitBuilderCacheInvalidation } from "@/lib/socket-server";
+
+const SIDEBAR_CACHE_TTL_MS = 30_000; // 30 seconds
+
+async function refreshSidebarCache(projectId: string) {
+  console.log(`Debug flow: refreshSidebarCache (delete) fired with`, { projectId });
+  const items = await prisma.sidebarItem.findMany({
+    where: { projectId },
+    orderBy: { order: "asc" },
+    include: { children: { orderBy: { order: "asc" } } },
+  });
+  setCache(`sidebar:${projectId}`, items, SIDEBAR_CACHE_TTL_MS);
+}
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -31,6 +45,8 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     });
 
     console.log(`Debug flow: DELETE /api/sidebar/[id] deleted`, { id, projectId });
+    await refreshSidebarCache(projectId);
+    emitBuilderCacheInvalidation(`sidebar:${projectId}`);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error(`Debug flow: DELETE /api/sidebar/[id] error`, err);

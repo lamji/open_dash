@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getOrLoadCache } from "@/lib/cache";
 
-const DEFAULT_WIDGETS = [
+export const DEFAULT_WIDGETS = [
   { slug: "revenue-kpi", title: "Revenue KPI Card", description: "Total revenue with trend indicator", category: "stats", jsxCode: JSON.stringify({ value: "$45,231", label: "Total Revenue", trend: "+12.5%", trendUp: true, period: "This month", icon: "dollar" }) },
   { slug: "user-growth", title: "User Growth Card", description: "Active users with growth percentage", category: "stats", jsxCode: JSON.stringify({ value: "12,543", label: "Active Users", trend: "+8.2%", trendUp: true, period: "This week", icon: "users" }) },
   { slug: "conversion-rate", title: "Conversion Rate Card", description: "Conversion rate with trend", category: "stats", jsxCode: JSON.stringify({ value: "3.24%", label: "Conversion Rate", trend: "-1.2%", trendUp: false, period: "vs last week", icon: "target" }) },
@@ -34,36 +35,59 @@ const DEFAULT_WIDGETS = [
   { slug: "agent-leaderboard", title: "Agent Leaderboard", description: "Top performing agents ranked by score", category: "leaderboard", jsxCode: JSON.stringify({ title: "Top Agents", entries: [{ rank: 1, name: "Alice M.", score: 2840, badge: "gold" }, { rank: 2, name: "Bob K.", score: 2310, badge: "silver" }, { rank: 3, name: "Carol D.", score: 1980, badge: "bronze" }] }) },
   { slug: "executive-summary", title: "Executive Summary Panel", description: "High-level KPI overview for leadership", category: "summary", jsxCode: JSON.stringify({ title: "Executive Summary", kpis: [{ label: "Revenue", value: "$892K", trend: "+12%", up: true }, { label: "Users", value: "24.5K", trend: "+8%", up: true }, { label: "NPS", value: "72", trend: "+5", up: true }, { label: "Churn", value: "2.1%", trend: "-0.5%", up: false }] }) },
   { slug: "kpi-scorecard", title: "KPI Scorecard", description: "Comprehensive KPI scorecard with RAG status", category: "summary", jsxCode: JSON.stringify({ title: "KPI Scorecard", items: [{ kpi: "Revenue Growth", value: "12%", target: "10%", status: "green" }, { kpi: "Customer Churn", value: "2.1%", target: "< 3%", status: "green" }, { kpi: "NPS Score", value: "72", target: "> 70", status: "green" }] }) },
+  { slug: "button-left-icon", title: "Button With Left Icon", description: "Action button with icon before label", category: "button", jsxCode: JSON.stringify({ label: "Create Report", description: "Button with left icon" }) },
+  { slug: "button-right-icon", title: "Button With Right Icon", description: "Action button with icon after label", category: "button", jsxCode: JSON.stringify({ label: "View Details", description: "Button with right icon" }) },
+  { slug: "button-primary", title: "Primary Action Button", description: "Single primary CTA button", category: "button", jsxCode: JSON.stringify({ label: "Create Report", description: "Primary action button", variant: "primary" }) },
+  { slug: "button-secondary", title: "Secondary Action Button", description: "Single secondary CTA button", category: "button", jsxCode: JSON.stringify({ label: "Save Draft", description: "Secondary action button", variant: "secondary" }) },
+  { slug: "button-outline", title: "Outline Action Button", description: "Single outline CTA button", category: "button", jsxCode: JSON.stringify({ label: "View Details", description: "Outline action button", variant: "outline" }) },
+  { slug: "button-ghost", title: "Ghost Action Button", description: "Single low-emphasis CTA button", category: "button", jsxCode: JSON.stringify({ label: "Skip for now", description: "Ghost action button", variant: "ghost" }) },
+  { slug: "button-link", title: "Link Action Button", description: "Single link-style CTA button", category: "button", jsxCode: JSON.stringify({ label: "Open analytics", description: "Link action button", variant: "link" }) },
+  { slug: "button-destructive", title: "Destructive Action Button", description: "Single destructive CTA button", category: "button", jsxCode: JSON.stringify({ label: "Delete item", description: "Destructive action button", variant: "destructive" }) },
+  { slug: "upload-button-solid", title: "Upload Button", description: "Single primary upload button", category: "button", jsxCode: JSON.stringify({ label: "Upload file", description: "Primary upload button", variant: "upload-solid" }) },
+  { slug: "upload-button-outline", title: "Upload Assets Button", description: "Single outline upload button", category: "button", jsxCode: JSON.stringify({ label: "Upload assets", description: "Outline upload button", variant: "upload-outline" }) },
+  { slug: "upload-button-dashed", title: "Drag Upload Button", description: "Single dashed upload button", category: "button", jsxCode: JSON.stringify({ label: "Drag and upload", description: "Dashed upload button", variant: "upload-dashed" }) },
+  { slug: "upload-buttons", title: "Upload Button Variants", description: "Multiple upload button styles: solid, outline, and dashed", category: "button", jsxCode: JSON.stringify({ labels: ["Upload file", "Upload assets", "Drag and upload"] }) },
+  { slug: "button-variant-set", title: "Button Variant Set", description: "Default, secondary, outline, ghost, link, and destructive button variants", category: "button", jsxCode: JSON.stringify({ labels: { default: "Default", secondary: "Secondary", outline: "Outline", ghost: "Ghost", link: "Link", destructive: "Destructive" } }) },
 ];
+
+const WIDGET_CACHE_KEY = "widgets:all";
+const WIDGET_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export async function GET() {
   console.log(`Debug flow: GET /api/widgets fired with`, { timestamp: new Date().toISOString() });
 
   try {
-    let widgets = await prisma.widgetTemplate.findMany({
-      orderBy: { createdAt: "asc" },
-    });
-
-    console.log(`Debug flow: GET /api/widgets fetched widgets`, { count: widgets.length });
-
-    if (widgets.length === 0) {
-      console.log(`Debug flow: GET /api/widgets DB empty — auto-seeding default widgets`, { count: DEFAULT_WIDGETS.length });
+    const widgets = await getOrLoadCache(WIDGET_CACHE_KEY, async () => {
+      // Always sync defaults so newly added slugs backfill into existing DBs.
       await prisma.widgetTemplate.createMany({
         data: DEFAULT_WIDGETS,
         skipDuplicates: true,
       });
-      widgets = await prisma.widgetTemplate.findMany({
+      console.log(`Debug flow: GET /api/widgets default sync complete`, { defaultCount: DEFAULT_WIDGETS.length });
+
+      const freshWidgets = await prisma.widgetTemplate.findMany({
         orderBy: { createdAt: "asc" },
       });
-      console.log(`Debug flow: GET /api/widgets auto-seed complete`, { count: widgets.length });
-    }
+      console.log(`Debug flow: GET /api/widgets fetched widgets`, { count: freshWidgets.length });
+
+      return freshWidgets;
+    }, WIDGET_CACHE_TTL_MS);
 
     return NextResponse.json({ widgets });
   } catch (error) {
     console.error("Debug flow: GET /api/widgets error", error);
-    return NextResponse.json(
-      { error: "Failed to fetch widgets" },
-      { status: 500 }
-    );
+    const now = new Date().toISOString();
+    const fallbackWidgets = DEFAULT_WIDGETS.map((widget, idx) => ({
+      id: `fallback-${idx + 1}`,
+      slug: widget.slug,
+      title: widget.title,
+      description: widget.description,
+      category: widget.category,
+      jsxCode: widget.jsxCode,
+      createdAt: now,
+      updatedAt: now,
+    }));
+    console.log(`Debug flow: GET /api/widgets fallback fired with`, { count: fallbackWidgets.length });
+    return NextResponse.json({ widgets: fallbackWidgets });
   }
 }

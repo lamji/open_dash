@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { blockId, slotIdx, blockType, currentCss, message, history, widget } = body as {
+    const { blockId, slotIdx, blockType, currentCss, message, history, widget, mode } = body as {
       blockId: string;
       slotIdx: number;
       blockType: string;
@@ -111,6 +111,7 @@ export async function POST(request: NextRequest) {
         title: string;
         widgetData: Record<string, unknown>;
       };
+      mode?: "styles";
     };
 
     if (!message || typeof message !== "string") {
@@ -119,7 +120,15 @@ export async function POST(request: NextRequest) {
 
     console.log(`Debug flow: POST /api/builder/ai-style params`, { blockId, slotIdx, blockType, currentCss, widget });
 
-    const widgetInfo = widget ? `
+    const isBlockLevel = slotIdx < 0;
+    const targetLabel = isBlockLevel
+      ? `block wrapper for block ${blockId}`
+      : `column ${slotIdx + 1} of block ${blockId}`;
+    const targetElementId = isBlockLevel
+      ? `builder-block-${blockId}`
+      : `builder-slot-${blockId}-${slotIdx}`;
+
+    const widgetInfo = !isBlockLevel && widget ? `
 
 WIDGET CONTENT:
 This column contains a "${widget.title}" widget (ID: ${widget.widgetId}, Category: ${widget.category}).
@@ -144,10 +153,10 @@ STYLING CAPABILITIES:
 - Chart colors come from widgetData (segments[].color as hex, or inline hsl() in bars). To change chart colors, the widgetData must be updated — container CSS alone cannot override inline styles on inner elements.
 - Progress bars use shadcn <Progress> component.` : `
 
-This column is currently EMPTY (no widget placed yet). You can style it with any CSS properties.
+${isBlockLevel ? "You are styling the OUTER BLOCK WRAPPER, not an inner column." : "This column is currently EMPTY (no widget placed yet). You can style it with any CSS properties."}
 
-**COLUMN LAYOUT CONTROLS:**
-When styling empty columns, you can control how future content will be positioned:
+**${isBlockLevel ? "BLOCK WRAPPER" : "COLUMN"} LAYOUT CONTROLS:**
+When styling this ${isBlockLevel ? "wrapper" : "column"}, you can control how content will be positioned:
 - display: flex (enables flexbox layout)
 - flex-direction: column | row (vertical or horizontal stacking)
 - align-items: flex-start | center | flex-end | stretch (cross-axis alignment)
@@ -156,17 +165,19 @@ When styling empty columns, you can control how future content will be positione
 - Example: "display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;"`;
 
     const systemPrompt = `You are a CSS assistant for a dashboard column editor.
+${mode === "styles" ? "\n⚠️ MODE: User explicitly requested CSS styling with /styles command. Focus purely on CSS-based styling." : ""}
 
 TARGET ELEMENT:
 - Layout Type: "${blockType}"
-- Column Position: ${slotIdx + 1} (slot index ${slotIdx})
-- Unique Element ID: builder-slot-${blockId}-${slotIdx}
+- Target: ${targetLabel}
+- ${isBlockLevel ? "Block-level target (no slot index)" : `Column Position: ${slotIdx + 1} (slot index ${slotIdx})`}
+- Unique Element ID: ${targetElementId}
 - Block ID: ${blockId}
 ${widgetInfo}
 
-You are styling THIS SPECIFIC COLUMN ONLY. The styles you generate will be applied directly to the DOM element with data-test-id="builder-slot-${blockId}-${slotIdx}".
+You are styling THIS SPECIFIC ${isBlockLevel ? "BLOCK WRAPPER" : "COLUMN"} ONLY. The styles you generate will be applied directly to the DOM element with data-test-id="${targetElementId}".
 
-Current CSS applied to this column:
+Current CSS applied to this ${isBlockLevel ? "block wrapper" : "column"}:
 \`\`\`
 ${currentCss || "(no styles yet)"}
 \`\`\`
@@ -177,7 +188,7 @@ Rules:
 3. If the user asks to change a property that already exists in Current CSS, include the updated value.
 4. If the user asks to "revert", "remove", or "clear" styles, output ALL current properties with empty string values (e.g.: background-color: ; padding: ;).
 5. Output only the properties that need to be added, changed, or removed.
-6. Remember: You are styling column ${slotIdx + 1} of block ${blockId}. These styles will ONLY affect this specific column.`;
+6. Remember: You are styling ${targetLabel}. These styles will ONLY affect this specific ${isBlockLevel ? "block wrapper" : "column"}.`;
 
     const messages: Groq.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: systemPrompt },

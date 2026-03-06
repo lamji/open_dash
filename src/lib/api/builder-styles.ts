@@ -64,14 +64,15 @@ export async function generateAiStyle(
     category: string;
     title: string;
     widgetData: Record<string, unknown>;
-  }
+  },
+  mode?: "styles"
 ): Promise<GenerateAiStyleResponse> {
-  console.log(`Debug flow: generateAiStyle fired with`, { blockId, slotIdx, blockType, message, widget });
+  console.log(`Debug flow: generateAiStyle fired with`, { blockId, slotIdx, blockType, message, widget, mode });
   try {
     const res = await fetch("/api/builder/ai-style", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ blockId, slotIdx, blockType, currentCss, message, history, widget }),
+      body: JSON.stringify({ blockId, slotIdx, blockType, currentCss, message, history, widget, mode }),
     });
     const data = await res.json();
     console.log(`Debug flow: generateAiStyle response`, { ok: data.ok, cssLength: data.css?.length });
@@ -89,14 +90,15 @@ export async function generateAiWidgetUpdate(
   widgetId: string,
   category: string,
   message: string,
-  history: GroqChatMessage[]
+  history: GroqChatMessage[],
+  mode?: "data" | "config"
 ): Promise<GenerateAiWidgetUpdateResponse> {
-  console.log(`Debug flow: generateAiWidgetUpdate fired with`, { blockId, slotIdx, widgetId, category, message });
+  console.log(`Debug flow: generateAiWidgetUpdate fired with`, { blockId, slotIdx, widgetId, category, message, mode });
   try {
     const res = await fetch("/api/builder/ai-widget-update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ blockId, slotIdx, currentWidgetData, widgetId, category, message, history }),
+      body: JSON.stringify({ blockId, slotIdx, currentWidgetData, widgetId, category, message, history, mode }),
     });
     const data = await res.json();
     console.log(`Debug flow: generateAiWidgetUpdate response`, { ok: data.ok, hasWidgetData: !!data.widgetData });
@@ -110,11 +112,18 @@ export async function generateAiWidgetUpdate(
 export async function saveWidgetData(
   blockId: string,
   slotIdx: number,
-  widgetData: Record<string, unknown>,
+  widgetData?: Record<string, unknown>,
   functionCode?: string,
   layoutId?: string
 ): Promise<SaveWidgetDataResponse> {
-  console.log(`Debug flow: saveWidgetData fired with`, { blockId, slotIdx, dataKeys: Object.keys(widgetData), hasFunctionCode: !!functionCode, layoutId });
+  console.log(`Debug flow: saveWidgetData fired with`, {
+    blockId,
+    slotIdx,
+    hasWidgetData: widgetData !== undefined,
+    dataKeys: widgetData ? Object.keys(widgetData) : [],
+    hasFunctionCode: functionCode !== undefined,
+    layoutId,
+  });
   try {
     const res = await fetch("/api/builder/blocks/data", {
       method: "PATCH",
@@ -143,8 +152,24 @@ export async function saveGridRatio(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ blockId, slotIdx: -1, css: "", gridRatio: ratio, layoutId, blocks }),
     });
-    const data = await res.json();
+    const raw = await res.text();
+    let data: Partial<SaveBlockStylesResponse> = {};
+    if (raw.trim().length > 0) {
+      try {
+        data = JSON.parse(raw) as Partial<SaveBlockStylesResponse>;
+      } catch (parseErr) {
+        console.error(`Debug flow: saveGridRatio JSON parse error`, { parseErr, raw });
+        return { ok: false, error: "Invalid JSON response from grid ratio save endpoint." };
+      }
+    } else if (!res.ok) {
+      return { ok: false, error: `Grid ratio save failed with status ${res.status}.` };
+    }
     console.log(`Debug flow: saveGridRatio response`, { ok: data.ok, layoutId: data.layoutId });
+    if (typeof data.ok !== "boolean") {
+      return res.ok
+        ? { ok: true, layoutId }
+        : { ok: false, error: `Grid ratio save failed with status ${res.status}.` };
+    }
     return data as SaveBlockStylesResponse;
   } catch (err) {
     console.error(`Debug flow: saveGridRatio error`, err);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { DEFAULT_WIDGETS } from "../route";
 
 export async function GET(
   request: Request,
@@ -14,6 +15,22 @@ export async function GET(
     });
 
     if (!widget) {
+      const fallback = DEFAULT_WIDGETS.find((entry) => entry.slug === slug);
+      if (fallback) {
+        const now = new Date().toISOString();
+        const fallbackWidget = {
+          id: `fallback-${slug}`,
+          slug: fallback.slug,
+          title: fallback.title,
+          description: fallback.description,
+          category: fallback.category,
+          jsxCode: fallback.jsxCode,
+          createdAt: now,
+          updatedAt: now,
+        };
+        console.log(`Debug flow: GET /api/widgets/[slug] fallback not-found sync fired with`, { slug });
+        return NextResponse.json({ widget: fallbackWidget });
+      }
       console.log(`Debug flow: GET /api/widgets/[slug] widget not found`, { slug });
       return NextResponse.json({ error: "Widget not found" }, { status: 404 });
     }
@@ -22,6 +39,22 @@ export async function GET(
     return NextResponse.json({ widget });
   } catch (error) {
     console.error("Debug flow: GET /api/widgets/[slug] error", error);
+    const fallback = DEFAULT_WIDGETS.find((entry) => entry.slug === slug);
+    if (fallback) {
+      const now = new Date().toISOString();
+      const fallbackWidget = {
+        id: `fallback-${slug}`,
+        slug: fallback.slug,
+        title: fallback.title,
+        description: fallback.description,
+        category: fallback.category,
+        jsxCode: fallback.jsxCode,
+        createdAt: now,
+        updatedAt: now,
+      };
+      console.log(`Debug flow: GET /api/widgets/[slug] fallback error-path fired with`, { slug });
+      return NextResponse.json({ widget: fallbackWidget });
+    }
     return NextResponse.json({ error: "Failed to fetch widget" }, { status: 500 });
   }
 }
