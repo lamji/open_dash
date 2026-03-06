@@ -22,6 +22,26 @@ interface Props {
   id: string;
 }
 
+function cssStringToStyle(css: string): CSSProperties {
+  console.log(`Debug flow: preview cssStringToStyle fired with`, { cssLength: css.length });
+  const style: Record<string, string> = {};
+  css
+    .split(";")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .forEach((decl) => {
+      const idx = decl.indexOf(":");
+      if (idx < 0) return;
+      const prop = decl.slice(0, idx).trim();
+      const val = decl.slice(idx + 1).trim();
+      if (!prop || !val) return;
+      const camel = prop.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+      style[camel] = val;
+    });
+  console.log(`Debug flow: preview cssStringToStyle result`, { keys: Object.keys(style) });
+  return style as CSSProperties;
+}
+
 function getPreviewBlockStyle(block: LayoutBlock): CSSProperties {
   console.log(`Debug flow: getPreviewBlockStyle fired with`, { blockId: block.id, display: block.layoutDisplay });
   const gap = block.gap ? `${block.gap}` : undefined;
@@ -78,14 +98,40 @@ export default function DashboardPreview({ id }: Props) {
     );
   }
 
-  const renderPreviewSlot = (block: LayoutBlock, slot: LayoutSlot, slotIdx: number, depth: number) => {
+  const renderPreviewSlot = (
+    block: LayoutBlock,
+    slot: LayoutSlot,
+    slotIdx: number,
+    depth: number,
+    blockStyle: CSSProperties,
+  ) => {
     console.log(`Debug flow: renderPreviewSlot fired with`, { blockId: block.id, slotIdx, depth, hasWidget: !!slot.widget, childCount: slot.childBlocks?.length ?? 0 });
     const widget = slot.widget;
     const childBlocks = slot.childBlocks ?? [];
+    const hasChildren = childBlocks.length > 0;
+    const isNestedSlot = depth > 0;
+    const slotStyle = cssStringToStyle(block.columnStyles?.[slotIdx] ?? "");
+    const slotHasHeightOverride = slotStyle.height !== undefined || slotStyle.minHeight !== undefined;
+    const blockHasHeightOverride = blockStyle.height !== undefined || blockStyle.minHeight !== undefined;
+    const hasHeightConstraint = slotHasHeightOverride || blockHasHeightOverride;
+    const shouldApplyDefaultSlotMinHeight = !isNestedSlot && !slotHasHeightOverride && !blockHasHeightOverride;
+    const slotBaseStyle: CSSProperties = {
+      ...(!isNestedSlot ? { alignSelf: "stretch" } : {}),
+      ...(shouldApplyDefaultSlotMinHeight ? { minHeight: "160px" } : {}),
+      ...(isNestedSlot && !slotHasHeightOverride ? { minHeight: "0px" } : {}),
+      ...(hasChildren
+        ? {
+            display: "flex",
+            flexDirection: "column",
+            ...(hasHeightConstraint ? { overflow: "auto" } : {}),
+          }
+        : {}),
+    };
     return (
       <div
         key={slotIdx}
-        className={`min-h-[160px] rounded-xl border p-4 ${childBlocks.length > 0 ? "border-slate-300 bg-slate-100" : "border-slate-200 bg-white"}`}
+        className={`rounded-xl border p-4 ${hasChildren ? "border-slate-300 bg-slate-100" : "border-slate-200 bg-white"}`}
+        style={{ ...slotBaseStyle, ...slotStyle }}
         data-test-id={`preview-slot-${block.id}-${slotIdx}`}
       >
         {widget ? (
@@ -105,10 +151,12 @@ export default function DashboardPreview({ id }: Props) {
           </div>
         ) : null}
 
-        {childBlocks.length > 0 && (
-          <div className={`${widget ? "mt-4" : ""} rounded-xl bg-slate-200/80 p-3`} data-test-id={`preview-slot-children-${block.id}-${slotIdx}`}>
-            <div className="space-y-3">
-              {childBlocks.map((childBlock) => renderPreviewBlock(childBlock, depth + 1))}
+        {hasChildren && (
+          <div className={`${widget ? "mt-4" : ""} flex min-h-0 flex-col gap-3 ${hasHeightConstraint ? "h-full" : ""}`} data-test-id={`preview-slot-children-${block.id}-${slotIdx}`}>
+            <div className="rounded-xl bg-slate-200/80 p-3 flex-1 min-h-0">
+              <div className="space-y-3 min-h-0">
+                {childBlocks.map((childBlock) => renderPreviewBlock(childBlock, depth + 1))}
+              </div>
             </div>
           </div>
         )}
@@ -118,14 +166,15 @@ export default function DashboardPreview({ id }: Props) {
 
   const renderPreviewBlock = (block: LayoutBlock, depth = 0) => {
     console.log(`Debug flow: renderPreviewBlock fired with`, { blockId: block.id, depth });
+    const blockStyle = cssStringToStyle(block.blockStyles ?? "");
     return (
-      <div key={block.id} data-test-id={`preview-block-wrapper-${block.id}`}>
+      <div key={block.id} style={blockStyle} data-test-id={`preview-block-wrapper-${block.id}`}>
         <div
           className={getPreviewBlockClass(block)}
           style={getPreviewBlockStyle(block)}
           data-test-id={`preview-block-${block.id}`}
         >
-          {block.slots.map((slot, slotIdx) => renderPreviewSlot(block, slot, slotIdx, depth))}
+          {block.slots.map((slot, slotIdx) => renderPreviewSlot(block, slot, slotIdx, depth, blockStyle))}
         </div>
       </div>
     );

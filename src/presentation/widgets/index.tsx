@@ -215,6 +215,7 @@ type CellContext = { getValue: () => unknown; row: { id: string; original: Order
 function OrdersTableWidget({ data, preview = false }: { data: Record<string, unknown>; preview?: boolean }) {
   "use no memo";
   const config = data as TableWidgetConfig;
+  const rawConfig = data as TableWidgetConfig & Record<string, unknown>;
   const allRows: OrderRow[] = (config.rows as OrderRow[]) ?? [
     { id: "ORD-001", customer: "Alice Johnson", amount: "$129.00", status: "Completed" },
     { id: "ORD-002", customer: "Bob Smith",     amount: "$64.50",  status: "Pending" },
@@ -224,6 +225,15 @@ function OrdersTableWidget({ data, preview = false }: { data: Record<string, unk
 
   // In preview mode, show only 2 rows and disable all interactive features
   const rows = preview ? allRows.slice(0, 2) : allRows;
+  const featureOverrides: TableFeatureConfig = {
+    sorting: typeof rawConfig.sorting === "boolean" ? rawConfig.sorting : undefined,
+    filtering: typeof rawConfig.filtering === "boolean" ? rawConfig.filtering : undefined,
+    pagination: typeof rawConfig.pagination === "boolean" ? rawConfig.pagination : undefined,
+    columnVisibility: typeof rawConfig.columnVisibility === "boolean" ? rawConfig.columnVisibility : undefined,
+    columnResizing: typeof rawConfig.columnResizing === "boolean" ? rawConfig.columnResizing : undefined,
+    rowSelection: typeof rawConfig.rowSelection === "boolean" ? rawConfig.rowSelection : undefined,
+    expandableRows: typeof rawConfig.expandableRows === "boolean" ? rawConfig.expandableRows : undefined,
+  };
   const features: TableFeatureConfig = preview
     ? {
         sorting: false,
@@ -234,17 +244,45 @@ function OrdersTableWidget({ data, preview = false }: { data: Record<string, unk
         rowSelection: false,
         expandableRows: false,
       }
-    : (config.features ?? {
-        sorting: true,
-        filtering: true,
-        pagination: true,
-        columnVisibility: true,
-        columnResizing: true,
-        rowSelection: true,
-        expandableRows: false,
-      });
+    : {
+        sorting: featureOverrides.sorting ?? config.features?.sorting ?? true,
+        filtering: featureOverrides.filtering ?? config.features?.filtering ?? true,
+        pagination: featureOverrides.pagination ?? config.features?.pagination ?? true,
+        columnVisibility: featureOverrides.columnVisibility ?? config.features?.columnVisibility ?? true,
+        columnResizing: featureOverrides.columnResizing ?? config.features?.columnResizing ?? true,
+        rowSelection: featureOverrides.rowSelection ?? config.features?.rowSelection ?? true,
+        expandableRows: featureOverrides.expandableRows ?? config.features?.expandableRows ?? false,
+      };
 
   const tableState = useTableState();
+  const requestedPageSize = typeof config.pageSize === "number"
+    ? config.pageSize
+    : (typeof rawConfig.rowsPerPage === "number" ? rawConfig.rowsPerPage : undefined);
+  console.log(`Debug flow: OrdersTableWidget fired with`, {
+    preview,
+    rowCount: rows.length,
+    requestedPageSize,
+    featureOverrides,
+    resolvedFeatures: features,
+  });
+  React.useEffect(() => {
+    console.log(`Debug flow: OrdersTableWidget pageSize sync fired with`, {
+      preview,
+      paginationEnabled: features.pagination,
+      requestedPageSize,
+      currentPageSize: tableState.pagination.pageSize,
+    });
+    if (
+      preview ||
+      !features.pagination ||
+      requestedPageSize === undefined ||
+      requestedPageSize <= 0 ||
+      tableState.pagination.pageSize === requestedPageSize
+    ) {
+      return;
+    }
+    tableState.setPageSize(requestedPageSize);
+  }, [preview, features.pagination, requestedPageSize, tableState.pagination.pageSize, tableState.setPageSize]);
   const statusColor: Record<string, string> = {
     Completed: "text-emerald-700 bg-emerald-50",
     Pending: "text-yellow-700 bg-yellow-50",
@@ -364,14 +402,20 @@ function OrdersTableWidget({ data, preview = false }: { data: Record<string, unk
     },
   ];
   const title = config.title ?? "Recent Orders";
+  const tableControlledState = {
+    ...(features.sorting ? { sorting: tableState.sorting } : {}),
+    ...(features.filtering ? { columnFilters: Object.entries(tableState.filtering).map(([id, value]) => ({ id, value })) } : {}),
+    ...(features.pagination ? { pagination: tableState.pagination } : {}),
+    ...(features.rowSelection ? { rowSelection: tableState.rowSelection } : {}),
+  };
 
   const table = useReactTable({
     data: rows,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    state: tableControlledState,
     ...(features.sorting && {
       getSortedRowModel: getSortedRowModel(),
-      state: { sorting: tableState.sorting },
       onSortingChange: (updater: ((old: typeof tableState.sorting) => typeof tableState.sorting) | typeof tableState.sorting) => {
         const newSorting = typeof updater === "function" ? updater(tableState.sorting) : updater;
         tableState.setSorting(newSorting);
@@ -379,7 +423,6 @@ function OrdersTableWidget({ data, preview = false }: { data: Record<string, unk
     }),
     ...(features.filtering && {
       getFilteredRowModel: getFilteredRowModel(),
-      state: { columnFilters: Object.entries(tableState.filtering).map(([id, value]) => ({ id, value })) },
       onColumnFiltersChange: (updater: ((old: ColumnFiltersState) => ColumnFiltersState) | ColumnFiltersState) => {
         const newFilters = typeof updater === "function" ? updater([]) : updater;
         tableState.clearFiltering();
@@ -390,14 +433,17 @@ function OrdersTableWidget({ data, preview = false }: { data: Record<string, unk
     }),
     ...(features.pagination && {
       getPaginationRowModel: getPaginationRowModel(),
-      state: { pagination: tableState.pagination },
       onPaginationChange: (updater: ((old: { pageIndex: number; pageSize: number }) => { pageIndex: number; pageSize: number }) | { pageIndex: number; pageSize: number }) => {
         const newState = typeof updater === "function" ? updater(tableState.pagination) : updater;
-        tableState.setPageIndex(newState.pageIndex);
+        if (newState.pageSize !== tableState.pagination.pageSize) {
+          tableState.setPageSize(newState.pageSize);
+        }
+        if (newState.pageIndex !== tableState.pagination.pageIndex) {
+          tableState.setPageIndex(newState.pageIndex);
+        }
       },
     }),
     ...(features.rowSelection && {
-      state: { rowSelection: tableState.rowSelection },
       onRowSelectionChange: (updater: ((old: Record<string, boolean>) => Record<string, boolean>) | Record<string, boolean>) => {
         const newSelection = typeof updater === "function" ? updater(tableState.rowSelection) : updater;
         tableState.setRowSelection(newSelection);
@@ -499,7 +545,7 @@ function OrdersTableWidget({ data, preview = false }: { data: Record<string, unk
               variant="outline"
               size="sm"
               className="h-7 px-2"
-              onClick={() => tableState.setPageIndex(table.getState().pagination.pageIndex - 1)}
+              onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
               data-test-id="orders-table-prev-page"
             >
@@ -507,7 +553,7 @@ function OrdersTableWidget({ data, preview = false }: { data: Record<string, unk
             </Button>
             <select
               value={table.getState().pagination.pageSize}
-              onChange={(e) => tableState.setPageSize(Number(e.target.value))}
+              onChange={(e) => table.setPageSize(Number(e.target.value))}
               className="h-7 px-2 text-xs border border-slate-200 rounded"
               data-test-id="orders-table-page-size"
             >
@@ -521,7 +567,7 @@ function OrdersTableWidget({ data, preview = false }: { data: Record<string, unk
               variant="outline"
               size="sm"
               className="h-7 px-2"
-              onClick={() => tableState.setPageIndex(table.getState().pagination.pageIndex + 1)}
+              onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
               data-test-id="orders-table-next-page"
             >
@@ -2393,11 +2439,10 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
   // ── BUTTON ──────────────────────────────────────────────────────
   "primary-button": (data) => {
     const label = (data.label as string) ?? "Save Changes";
-    const description = (data.description as string) ?? "Primary action button";
+    console.log(`Debug flow: primary-button preview fired with`, { label });
     return (
-      <div className="flex flex-col h-full gap-3" data-test-id="primary-button-container">
-        <p className="text-xs text-slate-400" data-test-id="primary-button-desc">{description}</p>
-        <button className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg" data-test-id="primary-button-btn">{label}</button>
+      <div className="flex h-full items-center" data-test-id="primary-button-container">
+        <button className="w-fit px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg" data-test-id="primary-button-btn">{label}</button>
       </div>
     );
   },
@@ -2452,13 +2497,42 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   "split-button": (data) => {
     const label = (data.label as string) ?? "Export";
-    console.log(`Debug flow: split-button preview fired with`, { label });
+    const iconName = (data.icon as string | undefined)?.trim();
+    const buttonBgColor = (data.buttonBgColor as string | undefined)?.trim();
+    const buttonTextColor = (data.buttonTextColor as string | undefined)?.trim();
+    const iconColor = (data.iconColor as string | undefined)?.trim();
+    const arrowBgColor = (data.arrowBgColor as string | undefined)?.trim();
+    console.log(`Debug flow: split-button preview fired with`, {
+      label,
+      iconName,
+      buttonBgColor,
+      buttonTextColor,
+      iconColor,
+      arrowBgColor,
+    });
     return (
       <div className="flex flex-col h-full justify-center gap-3" data-test-id="split-button-container">
         <p className="text-xs text-slate-500" data-test-id="split-button-label">Split Button</p>
-        <div className="inline-flex w-fit items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm" data-test-id="split-button-wrapper">
+        <div
+          className="inline-flex w-fit items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm"
+          style={{
+            ...(buttonBgColor ? { backgroundColor: buttonBgColor } : {}),
+            ...(buttonTextColor ? { color: buttonTextColor } : {}),
+          }}
+          data-test-id="split-button-wrapper"
+        >
           <span data-test-id="split-button-main">{label}</span>
-          <span className="rounded-md bg-blue-700/70 p-1" data-test-id="split-button-arrow"><ChevronDown className="w-4 h-4" data-test-id="split-button-arrow-icon" /></span>
+          <span
+            className="rounded-md bg-blue-700/70 p-1"
+            style={arrowBgColor ? { backgroundColor: arrowBgColor } : undefined}
+            data-test-id="split-button-arrow"
+          >
+            <span style={iconColor ? { color: iconColor } : undefined} data-test-id="split-button-arrow-icon">
+              {iconName
+                ? <DynamicIcon name={iconName} className="w-4 h-4" />
+                : <ChevronDown className="w-4 h-4" />}
+            </span>
+          </span>
         </div>
       </div>
     );
@@ -2468,14 +2542,27 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   "button-left-icon": (data) => {
     const label = (data.label as string) ?? "Create Report";
-    const description = (data.description as string) ?? "Button with left icon";
-    console.log(`Debug flow: button-left-icon preview fired with`, { label, description });
+    const iconName = (data.icon as string | undefined)?.trim();
+    const buttonBgColor = (data.buttonBgColor as string | undefined)?.trim();
+    const buttonTextColor = (data.buttonTextColor as string | undefined)?.trim();
+    const iconColor = (data.iconColor as string | undefined)?.trim();
+    console.log(`Debug flow: button-left-icon preview fired with`, { label, iconName, buttonBgColor, buttonTextColor, iconColor });
     return (
-      <div className="flex flex-col h-full gap-3" data-test-id="button-left-icon-container">
-        <p className="text-xs text-slate-500" data-test-id="button-left-icon-desc">{description}</p>
-        <button className="w-fit px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg inline-flex items-center gap-2 hover:bg-indigo-700" data-test-id="button-left-icon-btn">
-          <Plus className="w-4 h-4" data-test-id="button-left-icon-symbol" />
-          <span data-test-id="button-left-icon-label">{label}</span>
+      <div className="flex h-full items-center" data-test-id="button-left-icon-container">
+        <button
+          className="w-full min-w-0 px-3 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg inline-flex items-center justify-center gap-2 hover:bg-indigo-700"
+          style={{
+            ...(buttonBgColor ? { backgroundColor: buttonBgColor } : {}),
+            ...(buttonTextColor ? { color: buttonTextColor } : {}),
+          }}
+          data-test-id="button-left-icon-btn"
+        >
+          <span style={iconColor ? { color: iconColor } : undefined} data-test-id="button-left-icon-symbol">
+            {iconName
+              ? <DynamicIcon name={iconName} className="w-4 h-4" />
+              : <Plus className="w-4 h-4" />}
+          </span>
+          <span className="truncate" data-test-id="button-left-icon-label">{label}</span>
         </button>
       </div>
     );
@@ -2483,14 +2570,27 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   "button-right-icon": (data) => {
     const label = (data.label as string) ?? "View Details";
-    const description = (data.description as string) ?? "Button with right icon";
-    console.log(`Debug flow: button-right-icon preview fired with`, { label, description });
+    const iconName = (data.icon as string | undefined)?.trim();
+    const buttonBgColor = (data.buttonBgColor as string | undefined)?.trim();
+    const buttonTextColor = (data.buttonTextColor as string | undefined)?.trim();
+    const iconColor = (data.iconColor as string | undefined)?.trim();
+    console.log(`Debug flow: button-right-icon preview fired with`, { label, iconName, buttonBgColor, buttonTextColor, iconColor });
     return (
-      <div className="flex flex-col h-full gap-3" data-test-id="button-right-icon-container">
-        <p className="text-xs text-slate-500" data-test-id="button-right-icon-desc">{description}</p>
-        <button className="w-fit px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg inline-flex items-center gap-2 hover:bg-emerald-700" data-test-id="button-right-icon-btn">
+      <div className="flex h-full items-center" data-test-id="button-right-icon-container">
+        <button
+          className="w-fit px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg inline-flex items-center gap-2 hover:bg-emerald-700"
+          style={{
+            ...(buttonBgColor ? { backgroundColor: buttonBgColor } : {}),
+            ...(buttonTextColor ? { color: buttonTextColor } : {}),
+          }}
+          data-test-id="button-right-icon-btn"
+        >
           <span data-test-id="button-right-icon-label">{label}</span>
-          <ArrowUpRight className="w-4 h-4" data-test-id="button-right-icon-symbol" />
+          <span style={iconColor ? { color: iconColor } : undefined} data-test-id="button-right-icon-symbol">
+            {iconName
+              ? <DynamicIcon name={iconName} className="w-4 h-4" />
+              : <ArrowUpRight className="w-4 h-4" />}
+          </span>
         </button>
       </div>
     );
@@ -2498,11 +2598,9 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   "button-primary": (data) => {
     const label = (data.label as string) ?? "Create Report";
-    const description = (data.description as string) ?? "Primary action button";
-    console.log(`Debug flow: button-primary preview fired with`, { label, description });
+    console.log(`Debug flow: button-primary preview fired with`, { label });
     return (
-      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="button-primary-container">
-        <p className="text-xs text-slate-500" data-test-id="button-primary-desc">{description}</p>
+      <div className="flex h-full items-center" data-test-id="button-primary-container">
         <button className="w-fit rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm" data-test-id="button-primary-btn">
           {label}
         </button>
@@ -2512,11 +2610,9 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   "button-secondary": (data) => {
     const label = (data.label as string) ?? "Save Draft";
-    const description = (data.description as string) ?? "Secondary action button";
-    console.log(`Debug flow: button-secondary preview fired with`, { label, description });
+    console.log(`Debug flow: button-secondary preview fired with`, { label });
     return (
-      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="button-secondary-container">
-        <p className="text-xs text-slate-500" data-test-id="button-secondary-desc">{description}</p>
+      <div className="flex h-full items-center" data-test-id="button-secondary-container">
         <button className="w-fit rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm" data-test-id="button-secondary-btn">
           {label}
         </button>
@@ -2526,11 +2622,9 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   "button-outline": (data) => {
     const label = (data.label as string) ?? "View Details";
-    const description = (data.description as string) ?? "Outline action button";
-    console.log(`Debug flow: button-outline preview fired with`, { label, description });
+    console.log(`Debug flow: button-outline preview fired with`, { label });
     return (
-      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="button-outline-container">
-        <p className="text-xs text-slate-500" data-test-id="button-outline-desc">{description}</p>
+      <div className="flex h-full items-center" data-test-id="button-outline-container">
         <button className="w-fit rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm" data-test-id="button-outline-btn">
           {label}
         </button>
@@ -2540,11 +2634,9 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   "button-ghost": (data) => {
     const label = (data.label as string) ?? "Skip for now";
-    const description = (data.description as string) ?? "Ghost action button";
-    console.log(`Debug flow: button-ghost preview fired with`, { label, description });
+    console.log(`Debug flow: button-ghost preview fired with`, { label });
     return (
-      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="button-ghost-container">
-        <p className="text-xs text-slate-500" data-test-id="button-ghost-desc">{description}</p>
+      <div className="flex h-full items-center" data-test-id="button-ghost-container">
         <button className="w-fit rounded-xl bg-transparent px-4 py-2 text-sm font-semibold text-slate-600" data-test-id="button-ghost-btn">
           {label}
         </button>
@@ -2554,14 +2646,12 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   "button-link": (data) => {
     const label = (data.label as string) ?? "Open analytics";
-    const description = (data.description as string) ?? "Link action button";
-    console.log(`Debug flow: button-link preview fired with`, { label, description });
+    console.log(`Debug flow: button-link preview fired with`, { label });
     return (
-      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="button-link-container">
-        <p className="text-xs text-slate-500" data-test-id="button-link-desc">{description}</p>
-        <button className="inline-flex w-fit items-center gap-2 px-1 py-2 text-sm font-semibold text-blue-700" data-test-id="button-link-btn">
-          <span>{label}</span>
-          <ArrowUpRight className="w-4 h-4" data-test-id="button-link-icon" />
+      <div className="flex h-full items-center" data-test-id="button-link-container">
+        <button className="inline-flex w-full min-w-0 items-center justify-center gap-1 px-1 py-2 text-sm font-semibold text-blue-700" data-test-id="button-link-btn">
+          <span className="truncate">{label}</span>
+          <ArrowUpRight className="w-3.5 h-3.5 flex-shrink-0" data-test-id="button-link-icon" />
         </button>
       </div>
     );
@@ -2569,11 +2659,9 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   "button-destructive": (data) => {
     const label = (data.label as string) ?? "Delete item";
-    const description = (data.description as string) ?? "Destructive action button";
-    console.log(`Debug flow: button-destructive preview fired with`, { label, description });
+    console.log(`Debug flow: button-destructive preview fired with`, { label });
     return (
-      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="button-destructive-container">
-        <p className="text-xs text-slate-500" data-test-id="button-destructive-desc">{description}</p>
+      <div className="flex h-full items-center" data-test-id="button-destructive-container">
         <button className="w-fit rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm" data-test-id="button-destructive-btn">
           {label}
         </button>
@@ -2583,11 +2671,9 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   "upload-button-solid": (data) => {
     const label = (data.label as string) ?? "Upload file";
-    const description = (data.description as string) ?? "Primary upload button";
-    console.log(`Debug flow: upload-button-solid preview fired with`, { label, description });
+    console.log(`Debug flow: upload-button-solid preview fired with`, { label });
     return (
-      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="upload-button-solid-container">
-        <p className="text-xs text-slate-500" data-test-id="upload-button-solid-desc">{description}</p>
+      <div className="flex h-full items-center" data-test-id="upload-button-solid-container">
         <button className="inline-flex w-fit items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm" data-test-id="upload-button-solid-btn">
           <Upload className="w-4 h-4" data-test-id="upload-button-solid-icon" />
           <span>{label}</span>
@@ -2598,11 +2684,9 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   "upload-button-outline": (data) => {
     const label = (data.label as string) ?? "Upload assets";
-    const description = (data.description as string) ?? "Outline upload button";
-    console.log(`Debug flow: upload-button-outline preview fired with`, { label, description });
+    console.log(`Debug flow: upload-button-outline preview fired with`, { label });
     return (
-      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="upload-button-outline-container">
-        <p className="text-xs text-slate-500" data-test-id="upload-button-outline-desc">{description}</p>
+      <div className="flex h-full items-center" data-test-id="upload-button-outline-container">
         <button className="inline-flex w-fit items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700" data-test-id="upload-button-outline-btn">
           <Upload className="w-4 h-4" data-test-id="upload-button-outline-icon" />
           <span>{label}</span>
@@ -2613,11 +2697,9 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   "upload-button-dashed": (data) => {
     const label = (data.label as string) ?? "Drag and upload";
-    const description = (data.description as string) ?? "Dashed upload button";
-    console.log(`Debug flow: upload-button-dashed preview fired with`, { label, description });
+    console.log(`Debug flow: upload-button-dashed preview fired with`, { label });
     return (
-      <div className="flex flex-col h-full gap-3 justify-center" data-test-id="upload-button-dashed-container">
-        <p className="text-xs text-slate-500" data-test-id="upload-button-dashed-desc">{description}</p>
+      <div className="flex h-full items-center" data-test-id="upload-button-dashed-container">
         <button className="inline-flex w-fit items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600" data-test-id="upload-button-dashed-btn">
           <Upload className="w-4 h-4" data-test-id="upload-button-dashed-icon" />
           <span>{label}</span>
@@ -2811,21 +2893,54 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
   },
 
   // ── SEARCH ──────────────────────────────────────────────────────
+  "search-variant-set": (data) => {
+    const placeholders = (data.placeholders as Record<string, string>) ?? {
+      basic: "Search anything...",
+      filtered: "Search users...",
+      global: "Search dashboards...",
+    };
+    const filters = (data.filters as string[]) ?? ["All", "Active", "Inactive"];
+    console.log(`Debug flow: search-variant-set preview fired with`, { placeholders, filters });
+    return (
+      <div className="flex flex-col h-full justify-center gap-3" data-test-id="search-variant-set-container">
+        <div className="space-y-0.5" data-test-id="search-variant-set-header">
+          <p className="text-xs font-semibold text-slate-700">Search Variants</p>
+          <p className="text-[11px] text-slate-500">Basic, filtered, and global styles</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-3" data-test-id="search-variant-set-shell">
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-400" data-test-id="search-variant-set-basic">
+            <Search className="w-3.5 h-3.5 text-slate-400" data-test-id="search-variant-set-basic-icon" />
+            <span className="truncate" data-test-id="search-variant-set-basic-placeholder">{placeholders.basic}</span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5" data-test-id="search-variant-set-filters">
+            {filters.map((filter, index) => (
+              <span key={`${filter}-${index}`} className={`${index === 0 ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"} rounded-full px-2 py-1 text-[11px] font-medium`} data-test-id={`search-variant-set-filter-${index}`}>
+                {filter}
+              </span>
+            ))}
+          </div>
+          <div className="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-2" data-test-id="search-variant-set-global">
+            <p className="text-[10px] font-semibold uppercase text-slate-400" data-test-id="search-variant-set-global-label">Global</p>
+            <p className="text-xs text-slate-500 truncate" data-test-id="search-variant-set-global-placeholder">{placeholders.global}</p>
+          </div>
+        </div>
+      </div>
+    );
+  },
+
   "search-bar": (data) => {
     const placeholder = (data.placeholder as string) ?? "Search anything...";
     console.log(`Debug flow: search-bar preview fired with`, { placeholder });
     return (
-      <div className="flex flex-col h-full gap-3" data-test-id="search-bar-container">
-        <div className="flex items-center gap-2 px-3 py-2.5 border border-slate-200 rounded-lg bg-white shadow-sm" data-test-id="search-bar-input-wrapper">
+      <div className="flex h-full items-center" data-test-id="search-bar-container">
+        <div className="flex w-full min-w-0 items-center gap-2 px-3 py-2.5 border border-slate-200 rounded-lg bg-white shadow-sm" data-test-id="search-bar-input-wrapper">
           <Search className="w-4 h-4 text-slate-400 flex-shrink-0" data-test-id="search-bar-icon" />
-          <span className="text-sm text-slate-400 flex-1" data-test-id="search-bar-input">{placeholder}</span>
-          <kbd className="text-[10px] border border-slate-200 text-slate-400 px-1.5 py-0.5 rounded font-mono" data-test-id="search-bar-kbd">⌘K</kbd>
-        </div>
-        <div className="flex items-center gap-1.5" data-test-id="search-bar-variants">
-          <span className="text-[10px] text-slate-400 mr-1">Variants:</span>
-          {["Default","Rounded","With button"].map(v=>(
-            <span key={v} className="text-[10px] px-2 py-0.5 rounded-full border border-slate-200 text-slate-500 bg-slate-50" data-test-id={`search-bar-variant-${v.toLowerCase().replace(/ /g,"-")}`}>{v}</span>
-          ))}
+          <Input
+            type="text"
+            placeholder={placeholder}
+            className="h-auto border-0 bg-transparent p-0 text-sm text-slate-700 placeholder:text-slate-400 shadow-none focus-visible:ring-0"
+            data-test-id="search-bar-input"
+          />
         </div>
       </div>
     );
@@ -2838,7 +2953,12 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
       <div className="flex flex-col h-full gap-2" data-test-id="search-filters-container">
         <div className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-lg" data-test-id="search-filters-input-row">
           <Search className="w-3.5 h-3.5 text-slate-400" data-test-id="search-filters-icon" />
-          <span className="text-xs text-slate-400 flex-1" data-test-id="search-filters-input">{placeholder}</span>
+          <Input
+            type="text"
+            placeholder={placeholder}
+            className="h-auto border-0 bg-transparent p-0 text-xs text-slate-700 placeholder:text-slate-400 shadow-none focus-visible:ring-0"
+            data-test-id="search-filters-input"
+          />
           <Filter className="w-3.5 h-3.5 text-slate-400" data-test-id="search-filters-filter-icon" />
         </div>
         <div className="flex gap-1 flex-wrap" data-test-id="search-filters-chips">
@@ -2866,7 +2986,12 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
       <div className="border border-slate-200 rounded-xl overflow-hidden" data-test-id="global-search-container">
         <div className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-100" data-test-id="global-search-input-row">
           <Search className="w-4 h-4 text-slate-400" data-test-id="global-search-icon" />
-          <span className="text-sm text-slate-400 flex-1" data-test-id="global-search-input">{placeholder}</span>
+          <Input
+            type="text"
+            placeholder={placeholder}
+            className="h-auto border-0 bg-transparent p-0 text-sm text-slate-700 placeholder:text-slate-400 shadow-none focus-visible:ring-0"
+            data-test-id="global-search-input"
+          />
         </div>
         <div className="px-3 py-1.5" data-test-id="global-search-categories-section">
           <p className="text-[10px] text-slate-400 uppercase font-semibold mb-1" data-test-id="global-search-categories-title">Browse</p>

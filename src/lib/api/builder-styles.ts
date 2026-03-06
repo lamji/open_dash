@@ -14,12 +14,22 @@ export interface SaveBlockStylesResponse {
 export interface GenerateAiStyleResponse {
   ok: boolean;
   css?: string;
+  needsClarification?: boolean;
+  clarificationQuestion?: string;
   error?: string;
 }
 
 export interface GenerateAiWidgetUpdateResponse {
   ok: boolean;
   widgetData?: Record<string, unknown>;
+  error?: string;
+}
+
+export interface GenerateAiAssistantResponse {
+  ok: boolean;
+  reply?: string;
+  responseType?: "answer" | "execute_styles" | "execute_data" | "execute_config" | "clarify";
+  recommendedMode?: "styles" | "data" | "config" | "none";
   error?: string;
 }
 
@@ -65,17 +75,23 @@ export async function generateAiStyle(
     title: string;
     widgetData: Record<string, unknown>;
   },
-  mode?: "styles"
+  mode?: "styles",
+  promptContext?: string
 ): Promise<GenerateAiStyleResponse> {
-  console.log(`Debug flow: generateAiStyle fired with`, { blockId, slotIdx, blockType, message, widget, mode });
+  console.log(`Debug flow: generateAiStyle fired with`, { blockId, slotIdx, blockType, message, widget, mode, hasPromptContext: !!promptContext });
   try {
     const res = await fetch("/api/builder/ai-style", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ blockId, slotIdx, blockType, currentCss, message, history, widget, mode }),
+      body: JSON.stringify({ blockId, slotIdx, blockType, currentCss, message, history, widget, mode, promptContext }),
     });
     const data = await res.json();
-    console.log(`Debug flow: generateAiStyle response`, { ok: data.ok, cssLength: data.css?.length });
+    console.log(`Debug flow: generateAiStyle response`, {
+      ok: data.ok,
+      cssLength: data.css?.length,
+      needsClarification: data.needsClarification,
+      hasClarificationQuestion: !!data.clarificationQuestion,
+    });
     return data as GenerateAiStyleResponse;
   } catch (err) {
     console.error(`Debug flow: generateAiStyle error`, err);
@@ -91,14 +107,15 @@ export async function generateAiWidgetUpdate(
   category: string,
   message: string,
   history: GroqChatMessage[],
-  mode?: "data" | "config"
+  mode?: "data" | "config",
+  promptContext?: string
 ): Promise<GenerateAiWidgetUpdateResponse> {
-  console.log(`Debug flow: generateAiWidgetUpdate fired with`, { blockId, slotIdx, widgetId, category, message, mode });
+  console.log(`Debug flow: generateAiWidgetUpdate fired with`, { blockId, slotIdx, widgetId, category, message, mode, hasPromptContext: !!promptContext });
   try {
     const res = await fetch("/api/builder/ai-widget-update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ blockId, slotIdx, currentWidgetData, widgetId, category, message, history, mode }),
+      body: JSON.stringify({ blockId, slotIdx, currentWidgetData, widgetId, category, message, history, mode, promptContext }),
     });
     const data = await res.json();
     console.log(`Debug flow: generateAiWidgetUpdate response`, { ok: data.ok, hasWidgetData: !!data.widgetData });
@@ -109,14 +126,64 @@ export async function generateAiWidgetUpdate(
   }
 }
 
+export async function generateAiAssistant(
+  blockId: string,
+  slotIdx: number,
+  blockType: string,
+  currentCss: string,
+  message: string,
+  history: GroqChatMessage[],
+  widget?: {
+    widgetId: string;
+    category: string;
+    title: string;
+    widgetData: Record<string, unknown>;
+  },
+  promptContext?: string
+): Promise<GenerateAiAssistantResponse> {
+  console.log(`Debug flow: generateAiAssistant fired with`, {
+    blockId,
+    slotIdx,
+    blockType,
+    message,
+    hasWidget: !!widget,
+    hasPromptContext: !!promptContext,
+  });
+  try {
+    const res = await fetch("/api/builder/ai-assistant", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blockId, slotIdx, blockType, currentCss, message, history, widget, promptContext }),
+    });
+    const data = await res.json();
+    console.log(`Debug flow: generateAiAssistant response`, {
+      ok: data.ok,
+      replyLength: data.reply?.length,
+      responseType: data.responseType,
+      recommendedMode: data.recommendedMode,
+    });
+    return data as GenerateAiAssistantResponse;
+  } catch (err) {
+    console.error(`Debug flow: generateAiAssistant error`, err);
+    return { ok: false, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
+
 export async function saveWidgetData(
   blockId: string,
   slotIdx: number,
-  widgetData: Record<string, unknown>,
+  widgetData?: Record<string, unknown>,
   functionCode?: string,
   layoutId?: string
 ): Promise<SaveWidgetDataResponse> {
-  console.log(`Debug flow: saveWidgetData fired with`, { blockId, slotIdx, dataKeys: Object.keys(widgetData), hasFunctionCode: !!functionCode, layoutId });
+  console.log(`Debug flow: saveWidgetData fired with`, {
+    blockId,
+    slotIdx,
+    hasWidgetData: widgetData !== undefined,
+    dataKeys: widgetData ? Object.keys(widgetData) : [],
+    hasFunctionCode: functionCode !== undefined,
+    layoutId,
+  });
   try {
     const res = await fetch("/api/builder/blocks/data", {
       method: "PATCH",
@@ -145,8 +212,24 @@ export async function saveGridRatio(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ blockId, slotIdx: -1, css: "", gridRatio: ratio, layoutId, blocks }),
     });
-    const data = await res.json();
+    const raw = await res.text();
+    let data: Partial<SaveBlockStylesResponse> = {};
+    if (raw.trim().length > 0) {
+      try {
+        data = JSON.parse(raw) as Partial<SaveBlockStylesResponse>;
+      } catch (parseErr) {
+        console.error(`Debug flow: saveGridRatio JSON parse error`, { parseErr, raw });
+        return { ok: false, error: "Invalid JSON response from grid ratio save endpoint." };
+      }
+    } else if (!res.ok) {
+      return { ok: false, error: `Grid ratio save failed with status ${res.status}.` };
+    }
     console.log(`Debug flow: saveGridRatio response`, { ok: data.ok, layoutId: data.layoutId });
+    if (typeof data.ok !== "boolean") {
+      return res.ok
+        ? { ok: true, layoutId }
+        : { ok: false, error: `Grid ratio save failed with status ${res.status}.` };
+    }
     return data as SaveBlockStylesResponse;
   } catch (err) {
     console.error(`Debug flow: saveGridRatio error`, err);

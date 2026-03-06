@@ -23,3 +23,8 @@
 [2026-03-06T02:51:01.186Z] AI Response from Groq: {"responseText":"{\n  \"widgetId\": \"search\",\n   \"category\": \"search\",\n   \"title\": \"Search Input\",\n   \"widgetData\": {\n       \"icon\": \"Search\",\n       \"placeholder\": \"Search here...\"\n   }\n}"}
 [2026-03-06T02:51:01.186Z] Parsed widget config: {"widget":{"widgetId":"search","category":"search","title":"Search Input","widgetData":{"icon":"Search","placeholder":"Search here..."}}}
 [2026-03-06T02:51:01.186Z] SUCCESS: Widget generated: {"widgetId":"search","category":"search","title":"Search Input"}
+[2026-03-06T09:56:32.904Z] POST /api/builder/ai-widget fired
+[2026-03-06T09:56:32.904Z] Received prompt: {"prompt":"add button export csv"}
+[2026-03-06T09:56:32.904Z] AI Response from Groq: {"responseText":"{\n  \"widgetId\": \"split-button\",\n   \"category\": \"button\",\n   \"title\": \"Export CSV\",\n   \"widgetData\": {\n       \"label\": \"Export CSV\"\n   }\n}"}
+[2026-03-06T09:56:32.904Z] Parsed widget config: {"widget":{"widgetId":"split-button","category":"button","title":"Export CSV","widgetData":{"label":"Export CSV"}}}
+[2026-03-06T09:56:32.904Z] SUCCESS: Widget generated: {"widgetId":"split-button","category":"button","title":"Export CSV"}

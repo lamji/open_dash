@@ -114,9 +114,8 @@ export async function PATCH(request: NextRequest) {
     }
 
     const result = updateBlockInTree(layout, blockId, (block) => {
-      const styles = block.columnStyles ? [...block.columnStyles] : Array.from({ length: block.slots.length }, () => "");
+      const styles = block.columnStyles ? [...block.columnStyles] : [];
       if (slotIdx >= 0) {
-        while (styles.length <= slotIdx) styles.push("");
         styles[slotIdx] = css;
       }
       return {

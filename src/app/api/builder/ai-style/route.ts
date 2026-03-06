@@ -4,6 +4,11 @@ import type { GroqChatMessage } from "@/domain/builder/types";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
+interface ClarificationDecision {
+  needsClarification: boolean;
+  clarificationQuestion?: string;
+}
+
 function buildWidgetVisualDescription(
   widgetId: string,
   category: string,
@@ -93,12 +98,62 @@ function buildWidgetVisualDescription(
   return lines.join("\n");
 }
 
+function detectAmbiguousStyleIntent(
+  message: string,
+  widgetCategory?: string
+): ClarificationDecision {
+  console.log(`Debug flow: detectAmbiguousStyleIntent fired with`, { message, widgetCategory });
+  const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
+  const isQuestion = normalized.includes("?");
+  const hasDiagnosticLanguage =
+    /\b(is|why|can|can't|cannot|not working|broken|issue|problem|error|disabled)\b/.test(normalized);
+  const hasDirectStyleVerb =
+    /\b(set|make|change|update|adjust|apply|add|remove|increase|decrease|align|justify|center|left|right)\b/.test(normalized);
+
+  if (isQuestion && hasDiagnosticLanguage && !hasDirectStyleVerb) {
+    const result = {
+      needsClarification: true,
+      clarificationQuestion: "Do you want me to change CSS styling, or are you reporting a behavior bug that needs a component/code fix?",
+    };
+    console.log(`Debug flow: detectAmbiguousStyleIntent result`, result);
+    return result;
+  }
+
+  const hasHorizontalAlignIntent =
+    /\balign\s+(right|left|center|middle)\b/.test(normalized) ||
+    ((/\b(align|aligned|alignment|move|position)\b/.test(normalized) || /\b(right|left|center|middle)\b/.test(normalized))
+      && /\b(right|left|center|middle)\b/.test(normalized));
+
+  const hasExplicitCssProperty = /justify-content|align-items|text-align|margin-left|margin-right|left:|right:|display:\s*flex|float|position:/.test(normalized);
+  const hasTargetDetail = /\b(container|wrapper|column|block|button|content|text|icon|label|title|parent|child|widget)\b/.test(normalized);
+  const isShortVagueMessage = normalized.split(" ").length <= 8;
+
+  if (!hasHorizontalAlignIntent || hasExplicitCssProperty) {
+    const result = { needsClarification: false };
+    console.log(`Debug flow: detectAmbiguousStyleIntent result`, result);
+    return result;
+  }
+
+  if (!hasTargetDetail || isShortVagueMessage) {
+    const clarificationQuestion = widgetCategory === "button"
+      ? "Do you want to move the whole button to the right side of the container, or keep it in place and only right-align text/icon inside the button?"
+      : "Do you want to move the whole widget/container to the right, or only right-align content inside it?";
+    const result = { needsClarification: true, clarificationQuestion };
+    console.log(`Debug flow: detectAmbiguousStyleIntent result`, result);
+    return result;
+  }
+
+  const result = { needsClarification: false };
+  console.log(`Debug flow: detectAmbiguousStyleIntent result`, result);
+  return result;
+}
+
 export async function POST(request: NextRequest) {
   console.log(`Debug flow: POST /api/builder/ai-style fired`);
 
   try {
     const body = await request.json();
-    const { blockId, slotIdx, blockType, currentCss, message, history, widget, mode } = body as {
+    const { blockId, slotIdx, blockType, currentCss, message, history, widget, mode, promptContext } = body as {
       blockId: string;
       slotIdx: number;
       blockType: string;
@@ -112,13 +167,22 @@ export async function POST(request: NextRequest) {
         widgetData: Record<string, unknown>;
       };
       mode?: "styles";
+      promptContext?: string;
     };
 
     if (!message || typeof message !== "string") {
       return NextResponse.json({ ok: false, error: "message is required" }, { status: 400 });
     }
 
-    console.log(`Debug flow: POST /api/builder/ai-style params`, { blockId, slotIdx, blockType, currentCss, widget });
+    console.log(`Debug flow: POST /api/builder/ai-style params`, { blockId, slotIdx, blockType, currentCss, widget, hasPromptContext: !!promptContext });
+    const clarificationDecision = detectAmbiguousStyleIntent(message, widget?.category);
+    if (clarificationDecision.needsClarification) {
+      return NextResponse.json({
+        ok: true,
+        needsClarification: true,
+        clarificationQuestion: clarificationDecision.clarificationQuestion,
+      });
+    }
 
     const isBlockLevel = slotIdx < 0;
     const targetLabel = isBlockLevel
@@ -174,6 +238,11 @@ TARGET ELEMENT:
 - Unique Element ID: ${targetElementId}
 - Block ID: ${blockId}
 ${widgetInfo}
+${promptContext ? `
+
+LIVE BUILDER CONTEXT SNAPSHOT:
+${promptContext}
+` : ""}
 
 You are styling THIS SPECIFIC ${isBlockLevel ? "BLOCK WRAPPER" : "COLUMN"} ONLY. The styles you generate will be applied directly to the DOM element with data-test-id="${targetElementId}".
 

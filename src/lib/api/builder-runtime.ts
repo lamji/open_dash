@@ -14,7 +14,19 @@ export async function postBuilderLog(
 
 export async function bootstrapSocketServer(): Promise<void> {
   console.log(`Debug flow: bootstrapSocketServer fired with`, {});
-  await fetch("/api/socket/io");
+  const response = await fetch("/api/socket/bootstrap", { method: "GET" });
+  console.log(`Debug flow: bootstrapSocketServer response`, {
+    ok: response.ok,
+    status: response.status,
+  });
+  if (!response.ok) {
+    const responseText = await response.text().catch(() => "");
+    console.error(`Debug flow: bootstrapSocketServer failed`, {
+      status: response.status,
+      responseText,
+    });
+    throw new Error(`Socket bootstrap failed with status ${response.status}`);
+  }
 }
 
 export interface GenerateAiWidgetApiResponse {
@@ -29,13 +41,14 @@ export interface GenerateAiWidgetApiResponse {
 }
 
 export async function generateAiWidgetRequest(
-  prompt: string
+  prompt: string,
+  promptContext?: string
 ): Promise<GenerateAiWidgetApiResponse> {
-  console.log(`Debug flow: generateAiWidgetRequest fired with`, { prompt });
+  console.log(`Debug flow: generateAiWidgetRequest fired with`, { prompt, hasPromptContext: !!promptContext });
   const res = await fetch("/api/builder/ai-widget", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ prompt, promptContext }),
   });
   const data = (await res.json()) as GenerateAiWidgetApiResponse;
   console.log(`Debug flow: generateAiWidgetRequest response`, {
