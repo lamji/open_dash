@@ -176,17 +176,19 @@ const ASSISTANT_INTENT_PREFIXES = [
 const BUILDER_AUTOSAVE_DELAY_MS = 1500;
 
 async function fetchBuilderLayoutState(projectId: string): Promise<{
+  ok: boolean;
+  status: number;
   draftLayoutId: string | null;
   publishedLayoutId: string | null;
   lastPublishedAt: string | null;
 }> {
   console.log(`Debug flow: fetchBuilderLayoutState fired with`, { projectId });
   if (!projectId) {
-    return { draftLayoutId: null, publishedLayoutId: null, lastPublishedAt: null };
+    return { ok: false, status: 400, draftLayoutId: null, publishedLayoutId: null, lastPublishedAt: null };
   }
   const res = await fetch(`/api/config/builder_layout_state?projectId=${projectId}`);
   if (!res.ok) {
-    return { draftLayoutId: null, publishedLayoutId: null, lastPublishedAt: null };
+    return { ok: false, status: res.status, draftLayoutId: null, publishedLayoutId: null, lastPublishedAt: null };
   }
   const payload = await res.json() as {
     draftLayoutId?: string | null;
@@ -194,6 +196,8 @@ async function fetchBuilderLayoutState(projectId: string): Promise<{
     lastPublishedAt?: string | null;
   } | null;
   return {
+    ok: true,
+    status: res.status,
     draftLayoutId: payload?.draftLayoutId ?? null,
     publishedLayoutId: payload?.publishedLayoutId ?? null,
     lastPublishedAt: payload?.lastPublishedAt ?? null,
@@ -207,17 +211,17 @@ async function saveBuilderLayoutState(
     publishedLayoutId?: string | null;
     lastPublishedAt?: string | null;
   }
-): Promise<boolean> {
+): Promise<{ ok: boolean; status: number }> {
   console.log(`Debug flow: saveBuilderLayoutState fired with`, { projectId, state });
   if (!projectId) {
-    return false;
+    return { ok: false, status: 400 };
   }
   const res = await fetch(`/api/config/builder_layout_state?projectId=${projectId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(state),
   });
-  return res.ok;
+  return { ok: res.ok, status: res.status };
 }
 
 function detectButtonWidgetDataIntent(messageLower: string): boolean {
@@ -403,6 +407,7 @@ export function useBuilder() {
   const draftHydratedRef = useRef(false);
   const lastTrackedBlocksSignatureRef = useRef("[]");
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const remoteAutosaveEnabledRef = useRef(false);
   const latestBlocksRef = useRef<LayoutBlock[]>(blocks);
   const latestLayoutIdRef = useRef<string | null>(layoutId);
   const blocksSignature = useMemo(() => JSON.stringify(blocks), [blocks]);
@@ -509,6 +514,7 @@ export function useBuilder() {
       if (!projectId) {
         setBlocks([]);
         setLayoutId(null);
+        remoteAutosaveEnabledRef.current = false;
         draftHydratedRef.current = true;
         lastTrackedBlocksSignatureRef.current = JSON.stringify([]);
         return;
@@ -518,6 +524,20 @@ export function useBuilder() {
         if (cancelled) {
           return;
         }
+        if (!builderLayoutState.ok) {
+          remoteAutosaveEnabledRef.current = false;
+          setBlocks([]);
+          setLayoutId(null);
+          lastTrackedBlocksSignatureRef.current = JSON.stringify([]);
+          setAutosaveState((prev) => ({
+            ...prev,
+            hasUnsavedChanges: false,
+            isDraftSavedLocally: false,
+            isAutosaving: false,
+          }));
+          return;
+        }
+        remoteAutosaveEnabledRef.current = true;
         if (!builderLayoutState.draftLayoutId) {
           setBlocks([]);
           setLayoutId(null);
@@ -561,6 +581,7 @@ export function useBuilder() {
         console.error(`Debug flow: builder draft restore failed`, err);
         setBlocks([]);
         setLayoutId(null);
+        remoteAutosaveEnabledRef.current = false;
         lastTrackedBlocksSignatureRef.current = JSON.stringify([]);
       } finally {
         draftHydratedRef.current = true;
@@ -605,6 +626,7 @@ export function useBuilder() {
     }
     if (
       !draftHydratedRef.current ||
+      !remoteAutosaveEnabledRef.current ||
       !autosaveState.hasUnsavedChanges ||
       autosaveState.isDraftSavedLocally ||
       savingLayout ||
@@ -636,11 +658,33 @@ export function useBuilder() {
         if (result.ok) {
           const nextDraftLayoutId = result.layoutId ?? latestPersistedLayoutId;
           const builderLayoutState = await fetchBuilderLayoutState(projectId);
-          await saveBuilderLayoutState(projectId, {
+          if (!builderLayoutState.ok) {
+            if (builderLayoutState.status === 401) {
+              remoteAutosaveEnabledRef.current = false;
+            }
+            setAutosaveState((prev) => ({
+              ...prev,
+              isAutosaving: false,
+              isDraftSavedLocally: false,
+            }));
+            return;
+          }
+          const saveBuilderStateResult = await saveBuilderLayoutState(projectId, {
             draftLayoutId: nextDraftLayoutId,
             publishedLayoutId: builderLayoutState.publishedLayoutId,
             lastPublishedAt: builderLayoutState.lastPublishedAt,
           });
+          if (!saveBuilderStateResult.ok) {
+            if (saveBuilderStateResult.status === 401) {
+              remoteAutosaveEnabledRef.current = false;
+            }
+            setAutosaveState((prev) => ({
+              ...prev,
+              isAutosaving: false,
+              isDraftSavedLocally: false,
+            }));
+            return;
+          }
           if (result.layoutId && result.layoutId !== latestPersistedLayoutId) {
             setLayoutId(result.layoutId);
           }
@@ -652,6 +696,9 @@ export function useBuilder() {
             isDraftSavedLocally: true,
           }));
           return;
+        }
+        if (result.status === 401) {
+          remoteAutosaveEnabledRef.current = false;
         }
         console.error(`Debug flow: builder autosave task failed`, result.error);
         setAutosaveState((prev) => ({ ...prev, isAutosaving: false, isDraftSavedLocally: false }));
@@ -1407,11 +1454,16 @@ export function useBuilder() {
       if (!data.ok) throw new Error(data.error ?? "Save failed");
       console.log(`Debug flow: saveLayout saved`, { id: data.layout?.id });
       const builderLayoutState = await fetchBuilderLayoutState(projectId);
-      await saveBuilderLayoutState(projectId, {
-        draftLayoutId: data.layout?.id ?? null,
-        publishedLayoutId: builderLayoutState.publishedLayoutId,
-        lastPublishedAt: builderLayoutState.lastPublishedAt,
-      });
+      if (builderLayoutState.ok) {
+        const saveBuilderStateResult = await saveBuilderLayoutState(projectId, {
+          draftLayoutId: data.layout?.id ?? null,
+          publishedLayoutId: builderLayoutState.publishedLayoutId,
+          lastPublishedAt: builderLayoutState.lastPublishedAt,
+        });
+        remoteAutosaveEnabledRef.current = saveBuilderStateResult.ok;
+      } else {
+        remoteAutosaveEnabledRef.current = false;
+      }
       setLayoutId(data.layout?.id ?? null);
       setAutosaveState((prev) => ({
         ...prev,

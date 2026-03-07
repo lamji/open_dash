@@ -1,532 +1,68 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   Bot,
   Zap,
   Layers,
   Eye,
-  Shield,
-  Globe,
+  Code2,
+  LayoutGrid,
   ArrowRight,
-  CheckCircle2,
+  Check,
   LayoutDashboard,
-  BarChart3,
-  TrendingUp,
+  Sparkles,
+  Play,
+  Star,
+  Plus,
+  Save,
+  Palette,
 } from "lucide-react";
-import type { FeatureItem, StepItem, FooterSection } from "@/domain/landing/types";
+import { motion } from "framer-motion";
+import { BuilderShowcase } from "./modules/BuilderShowcase";
+import { Footer } from "@/components/shared/Footer";
+import { LANDING_FEATURES, LANDING_STATS, LANDING_STEPS, LANDING_TESTIMONIALS } from "./useLanding";
 
-const FEATURES: FeatureItem[] = [
-  {
-    icon: "Bot",
-    title: "AI-Powered Builder",
-    description:
-      "Describe what you want in plain English. Our AI builds it instantly — pages, tables, charts, forms, and more.",
-  },
-  {
-    icon: "Layers",
-    title: "50+ UI Components",
-    description:
-      "Production-ready components built on shadcn/ui. Cards, tables, charts, dialogs, accordions — all configurable via AI.",
-  },
-  {
-    icon: "Eye",
-    title: "Live Preview",
-    description:
-      "See changes in real-time as you build. Toggle between developer mode and preview mode instantly.",
-  },
-  {
-    icon: "Zap",
-    title: "Instant Deploy",
-    description:
-      "Publish your project with one click. Get a shareable URL for your clients, team, or stakeholders.",
-  },
-  {
-    icon: "Shield",
-    title: "Secure by Default",
-    description:
-      "Built-in authentication, rate limiting, and per-project data isolation. Your data never mixes with others.",
-  },
-  {
-    icon: "Globe",
-    title: "Multi-Project Support",
-    description:
-      "Create and manage multiple projects from a single dashboard. Each project is fully isolated.",
-  },
-];
+/* ────────────────────────────────────────────────────── */
+/*  Data                                                  */
+/* ────────────────────────────────────────────────────── */
 
-const STEPS: StepItem[] = [
-  {
-    number: "01",
-    title: "Describe Your App",
-    description:
-      'Tell the AI what you want to build. "Create a sales dashboard with a chart and data table."',
-  },
-  {
-    number: "02",
-    title: "AI Builds It",
-    description:
-      "The AI generates your pages, components, and layouts. Refine with follow-up prompts.",
-  },
-  {
-    number: "03",
-    title: "Publish & Share",
-    description:
-      "Hit publish. Your project is live with a shareable URL. Update anytime with AI.",
-  },
-];
-
-const FOOTER_SECTIONS: FooterSection[] = [
-  {
-    title: "Product",
-    links: [
-      { label: "Features", href: "#features" },
-      { label: "How It Works", href: "#how-it-works" },
-      { label: "Pricing", href: "#pricing" },
-    ],
-  },
-  {
-    title: "Company",
-    links: [
-      { label: "About", href: "#" },
-      { label: "Blog", href: "#" },
-      { label: "Careers", href: "#" },
-    ],
-  },
-  {
-    title: "Support",
-    links: [
-      { label: "Documentation", href: "#" },
-      { label: "Contact", href: "#" },
-      { label: "Status", href: "#" },
-    ],
-  },
-];
-
-const ICON_MAP: Record<string, React.ReactNode> = {
-  Bot: <Bot size={24} />,
-  Zap: <Zap size={24} />,
-  Layers: <Layers size={24} />,
-  Eye: <Eye size={24} />,
-  Shield: <Shield size={24} />,
-  Globe: <Globe size={24} />,
+const ICON_MAP: Record<string, ReactNode> = {
+  Bot: <Bot size={22} />, Zap: <Zap size={22} />, Layers: <Layers size={22} />,
+  Eye: <Eye size={22} />, Code2: <Code2 size={22} />, LayoutGrid: <LayoutGrid size={22} />,
+  Palette: <Palette size={22} />,
 };
 
+/* ────────────────────────────────────────────────────── */
+/*  Component                                             */
+/* ────────────────────────────────────────────────────── */
+
 export default function LandingPage() {
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("Debug flow: LandingPage fired");
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-blue-100 text-blue-900">
-      {/* ─── Navigation ─────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 border-b border-blue-200 bg-white/80 backdrop-blur-md shadow-sm">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          <Link
-            href="/"
-            className="flex items-center gap-2.5"
-            data-test-id="landing-logo"
-          >
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600">
-              <LayoutDashboard size={16} className="text-white" />
-            </div>
-            <span className="text-lg font-bold tracking-tight text-blue-900">OpenDash</span>
-          </Link>
+    <div className="min-h-screen bg-[#09090b] text-white selection:bg-violet-500/30">
+      <nav className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#09090b]/80 backdrop-blur-xl"><div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6"><Link href="/" className="flex items-center gap-2.5" data-test-id="landing-logo"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500"><LayoutDashboard size={16} className="text-white" /></div><span className="text-lg font-bold tracking-tight">OpenDash</span></Link><div className="hidden items-center gap-8 md:flex"><a href="#features" className="text-sm text-zinc-400 transition-colors hover:text-white" data-test-id="landing-nav-features">Features</a><a href="#how-it-works" className="text-sm text-zinc-400 transition-colors hover:text-white" data-test-id="landing-nav-how-it-works">How It Works</a><a href="#pricing" className="text-sm text-zinc-400 transition-colors hover:text-white" data-test-id="landing-nav-pricing">Pricing</a></div><div className="flex items-center gap-3"><Link href="/auth/login"><Button variant="ghost" data-test-id="landing-login-btn" className="text-sm text-zinc-400 hover:text-white hover:bg-white/5">Log In</Button></Link><Link href="/signup"><Button data-test-id="landing-signup-btn" className="bg-white text-sm font-semibold text-black hover:bg-zinc-200">Get Started</Button></Link></div></div></nav>
 
-          <div className="hidden items-center gap-8 md:flex">
-            <a
-              href="#features"
-              className="text-sm font-medium text-blue-700 transition-colors hover:text-blue-900"
-              data-test-id="landing-nav-features"
-            >
-              Features
-            </a>
-            <a
-              href="/how-to"
-              className="text-sm font-medium text-blue-700 transition-colors hover:text-blue-900"
-              data-test-id="landing-nav-how-it-works"
-            >
-              How It Works
-            </a>
-            <a
-              href="#pricing"
-              className="text-sm font-medium text-blue-700 transition-colors hover:text-blue-900"
-              data-test-id="landing-nav-pricing"
-            >
-              Pricing
-            </a>
-          </div>
+      <section className="relative overflow-hidden px-6 pb-24 pt-20 lg:pt-32"><div className="pointer-events-none absolute -top-40 left-1/2 h-[600px] w-[900px] -translate-x-1/2 rounded-full bg-gradient-to-r from-violet-500/20 via-fuchsia-500/10 to-cyan-500/20 blur-3xl" /><div className="pointer-events-none absolute -bottom-20 right-0 h-[400px] w-[500px] rounded-full bg-gradient-to-l from-violet-600/10 to-transparent blur-3xl" /><div className="relative mx-auto max-w-5xl text-center"><motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 backdrop-blur-sm"><Sparkles size={14} className="text-violet-400" /><span className="text-xs font-medium text-zinc-300">Now in Public Beta — free to use</span></motion.div><motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }} className="mx-auto max-w-4xl text-5xl font-extrabold leading-[1.1] tracking-tight sm:text-6xl lg:text-7xl">Pick a layout. <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-cyan-400 bg-clip-text text-transparent">Drop widgets.</span><br />Ship dashboards.</motion.h1><motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }} className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-zinc-400">A visual block builder with 50+ widgets, AI-powered styling, and a built-in code editor. Choose grid layouts, fill slots from the widget library, let AI fine-tune the CSS — then publish with one click.</motion.p><motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.3 }} className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"><Link href="/signup"><Button size="lg" data-test-id="landing-hero-cta" className="h-12 gap-2 bg-white px-8 text-base font-semibold text-black hover:bg-zinc-200">Start Building Free <ArrowRight size={16} /></Button></Link><a href="#how-it-works"><Button size="lg" variant="ghost" data-test-id="landing-hero-demo" className="h-12 gap-2 border border-white/10 px-8 text-base text-zinc-300 hover:bg-white/5 hover:text-white"><Play size={16} /> See How It Works</Button></a></motion.div></div><BuilderShowcase /></section>
 
-          <div className="flex items-center gap-3">
-            <Link href="/auth/login">
-              <Button
-                variant="ghost"
-                data-test-id="landing-login-btn"
-                className="text-sm font-medium text-blue-700 hover:text-blue-900"
-              >
-                Log In
-              </Button>
-            </Link>
-            <Link href="/signup">
-              <Button
-                data-test-id="landing-signup-btn"
-                className="bg-blue-600 text-sm font-medium text-white hover:bg-blue-700 shadow-md"
-              >
-                Get Started Free
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <section className="border-y border-white/[0.06] bg-white/[0.02] px-6 py-16"><div className="mx-auto grid max-w-5xl grid-cols-2 gap-8 md:grid-cols-4">{LANDING_STATS.map((stat) => <div key={stat.label} className="text-center"><p className="text-4xl font-extrabold tracking-tight">{stat.value}<span className="text-violet-400">{stat.suffix}</span></p><p className="mt-1 text-sm text-zinc-500">{stat.label}</p></div>)}</div></section>
 
-      {/* ─── Hero ───────────────────────────────────────── */}
-      <section className="relative px-6 pb-32 pt-20 overflow-hidden">
-        <div className="mx-auto max-w-7xl">
-          <div className="relative min-h-[600px]">
-            {/* Left Column: Header and Buttons */}
-            <div className="relative z-10 max-w-xl">
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-4 py-1.5 shadow-sm">
-                <span className="text-xs font-medium text-blue-700">
-                  Now in Public Beta
-                </span>
-              </div>
+      <section id="features" className="px-6 py-24"><div className="mx-auto max-w-6xl"><div className="text-center"><span className="mb-3 inline-block text-sm font-semibold text-violet-400">Capabilities</span><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Everything you need to ship fast</h2><p className="mx-auto mt-4 max-w-xl text-base text-zinc-400">AI intelligence meets enterprise-grade infrastructure. Build internal tools in minutes, not months.</p></div><div className="mt-16 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{LANDING_FEATURES.map((feature) => <div key={feature.title} className={`group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-zinc-900/50 p-6 transition-all hover:border-white/[0.12] hover:bg-zinc-900/80 ${feature.span === "wide" ? "sm:col-span-2 lg:col-span-2" : ""}`}><div className={`pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br ${feature.gradient} opacity-[0.07] blur-2xl transition-opacity group-hover:opacity-[0.12]`} /><div className={`mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${feature.gradient} text-white`}>{ICON_MAP[feature.icon] ?? <Bot size={22} />}</div><h3 className="text-base font-semibold">{feature.title}</h3><p className="mt-2 text-sm leading-relaxed text-zinc-400">{feature.description}</p></div>)}</div></div></section>
 
-              <h1 className="text-5xl font-extrabold leading-tight tracking-tight text-blue-900 sm:text-6xl lg:text-7xl">
-                Build Admin
-                <br />
-                Dashboards
-                <br />
-                <span className="bg-gradient-to-r from-blue-600 to-blue-400 bg-clip-text text-transparent">with AI</span>
-              </h1>
+      <section id="how-it-works" className="border-y border-white/[0.06] bg-white/[0.02] px-6 py-24"><div className="mx-auto max-w-5xl"><div className="text-center"><span className="mb-3 inline-block text-sm font-semibold text-violet-400">Workflow</span><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Three steps. Zero boilerplate.</h2><p className="mx-auto mt-4 max-w-xl text-base text-zinc-400">From idea to live dashboard in under a minute.</p></div><div className="relative mt-20"><div className="absolute left-1/2 top-0 hidden h-full w-px -translate-x-1/2 bg-gradient-to-b from-violet-500/40 via-fuchsia-500/20 to-transparent md:block" /><div className="space-y-16 md:space-y-24">{LANDING_STEPS.map((step, index) => <div key={step.number} className={`relative flex flex-col items-center gap-6 md:flex-row ${index % 2 === 1 ? "md:flex-row-reverse" : ""}`}><div className="relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-lg font-bold shadow-lg shadow-violet-500/20">{step.number}</div><div className={`max-w-sm ${index % 2 === 1 ? "md:text-right" : ""}`}><h3 className="text-xl font-semibold">{step.title}</h3><p className="mt-2 text-sm leading-relaxed text-zinc-400">{step.description}</p></div><div className="flex h-32 w-full max-w-xs items-center justify-center rounded-2xl border border-white/[0.06] bg-zinc-900/50 px-4">{index === 0 ? <div className="flex items-center gap-3">{[1, 2, 3, 4].map((cols) => <div key={cols} className={`flex gap-0.5 rounded-lg border ${cols === 2 ? "border-violet-500/50 bg-violet-500/10" : "border-zinc-700"} p-2`}>{Array.from({ length: cols }).map((_, cellIndex) => <div key={cellIndex} className={`h-8 w-4 rounded ${cols === 2 ? "bg-violet-500/40" : "bg-zinc-700"}`} />)}</div>)}</div> : null}{index === 1 ? <div className="flex flex-col items-center gap-2"><div className="grid grid-cols-2 gap-1.5"><div className="flex h-10 w-16 items-end gap-0.5 rounded-md border border-white/[0.06] bg-zinc-800/50 p-1">{[40, 65, 50, 80].map((height, barIndex) => <div key={barIndex} className="flex-1 rounded-t bg-violet-500" style={{ height: `${height}%` }} />)}</div><div className="flex h-10 w-16 items-center justify-center rounded-md border-2 border-dashed border-zinc-600"><Plus size={12} className="text-zinc-500" /></div></div><span className="text-[10px] text-zinc-500">Browse category → pick variant</span></div> : null}{index === 2 ? <div className="flex items-center gap-3"><div className="flex flex-col items-center gap-1"><div className="flex items-center gap-1 rounded-md bg-violet-500/20 px-2 py-1"><Sparkles size={10} className="text-violet-400" /><span className="text-[10px] text-violet-300">/styles</span></div><div className="flex items-center gap-1 rounded-md bg-emerald-500/20 px-2 py-1"><Save size={10} className="text-emerald-400" /><span className="text-[10px] text-emerald-300">Publish</span></div></div><span className="text-xs text-zinc-400">→ <span className="text-violet-400">app.opendash.io</span></span></div> : null}</div></div>)}</div></div></div></section>
 
-              <p className="mt-8 text-lg leading-relaxed text-blue-700 max-w-md">
-                Create powerful admin panels and internal tools using natural language. No coding required.
-              </p>
-            </div>
+      <section className="px-6 py-24"><div className="mx-auto max-w-6xl"><div className="text-center"><span className="mb-3 inline-block text-sm font-semibold text-violet-400">Testimonials</span><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Loved by builders</h2></div><div className="mt-16 grid gap-6 sm:grid-cols-3">{LANDING_TESTIMONIALS.map((testimonial) => <div key={testimonial.name} className="rounded-2xl border border-white/[0.06] bg-zinc-900/50 p-6"><div className="mb-4 flex gap-1">{Array.from({ length: 5 }).map((_, starIndex) => <Star key={starIndex} size={14} className="fill-amber-400 text-amber-400" />)}</div><p className="text-sm leading-relaxed text-zinc-300">&ldquo;{testimonial.quote}&rdquo;</p><div className="mt-6 flex items-center gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-xs font-bold">{testimonial.avatar}</div><div><p className="text-sm font-medium">{testimonial.name}</p><p className="text-xs text-zinc-500">{testimonial.role}, {testimonial.company}</p></div></div></div>)}</div></div></section>
 
-        
+      <section id="pricing" className="border-y border-white/[0.06] bg-white/[0.02] px-6 py-24"><div className="mx-auto max-w-5xl"><div className="text-center"><span className="mb-3 inline-block text-sm font-semibold text-violet-400">Pricing</span><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Start free. Scale when ready.</h2><p className="mx-auto mt-4 max-w-md text-base text-zinc-400">No credit card required. Upgrade anytime.</p></div><div className="mx-auto mt-16 grid max-w-4xl gap-6 sm:grid-cols-3"><div className="rounded-2xl border border-white/[0.06] bg-zinc-900/50 p-6"><h3 className="text-lg font-semibold">Free</h3><p className="mt-1 text-xs text-zinc-500">For solo builders</p><p className="mt-5"><span className="text-4xl font-extrabold">$0</span><span className="text-sm text-zinc-500"> / mo</span></p><ul className="mt-6 space-y-3">{["3 projects", "AI builder", "50+ components", "Community support"].map((item) => <li key={item} className="flex items-center gap-2 text-sm text-zinc-400"><Check size={14} className="text-zinc-600" />{item}</li>)}</ul><Link href="/signup" className="mt-8 block"><Button variant="outline" data-test-id="landing-pricing-free" className="w-full border-white/10 text-zinc-300 hover:bg-white/5 hover:text-white">Get Started</Button></Link></div><div className="relative rounded-2xl border border-violet-500/30 bg-zinc-900/80 p-6 shadow-lg shadow-violet-500/5"><div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-0.5 text-xs font-bold">Popular</div><h3 className="text-lg font-semibold">Pro</h3><p className="mt-1 text-xs text-zinc-500">For teams shipping fast</p><p className="mt-5"><span className="text-4xl font-extrabold">$29</span><span className="text-sm text-zinc-500"> / mo</span></p><ul className="mt-6 space-y-3">{["Unlimited projects", "Priority AI", "Custom domains", "Team collaboration", "Export to code", "Priority support"].map((item) => <li key={item} className="flex items-center gap-2 text-sm text-zinc-300"><Check size={14} className="text-violet-400" />{item}</li>)}</ul><Link href="/signup" className="mt-8 block"><Button data-test-id="landing-pricing-pro" className="w-full bg-gradient-to-r from-violet-500 to-fuchsia-500 font-semibold text-white hover:from-violet-600 hover:to-fuchsia-600">Start Free Trial</Button></Link></div><div className="rounded-2xl border border-white/[0.06] bg-zinc-900/50 p-6"><h3 className="text-lg font-semibold">Enterprise</h3><p className="mt-1 text-xs text-zinc-500">Custom everything</p><p className="mt-5"><span className="text-4xl font-extrabold">Custom</span></p><ul className="mt-6 space-y-3">{["SSO / SAML", "Dedicated support", "SLA guarantees", "On-prem option", "Custom integrations", "Audit logs"].map((item) => <li key={item} className="flex items-center gap-2 text-sm text-zinc-400"><Check size={14} className="text-zinc-600" />{item}</li>)}</ul><Link href="#" className="mt-8 block"><Button variant="outline" data-test-id="landing-pricing-enterprise" className="w-full border-white/10 text-zinc-300 hover:bg-white/5 hover:text-white">Contact Sales</Button></Link></div></div></div></section>
 
-            {/* Main Dashboard Mockup - Right Side */}
-            <div className="absolute right-0 top-0 z-10 w-80">
-              <div className="overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-2xl">
-                <div className="flex items-center gap-2 border-b border-blue-100 bg-blue-50 px-4 py-3">
-                  <div className="h-3 w-3 rounded-full bg-blue-300" />
-                  <div className="h-3 w-3 rounded-full bg-blue-300" />
-                  <div className="h-3 w-3 rounded-full bg-blue-300" />
-                </div>
-                <div className="p-6">
-                  <div className="mb-4">
-                    <h3 className="text-lg font-semibold text-blue-900">Sales Dashboard</h3>
-                    <p className="text-xs text-blue-600">Built in 30 seconds with AI</p>
-                  </div>
-                  <div className="space-y-3">
-                    <Card className="border-blue-100 p-3 shadow-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-blue-600">Revenue</span>
-                        <BarChart3 size={14} className="text-blue-400" />
-                      </div>
-                      <p className="mt-1 text-lg font-bold text-blue-900">$45.2k</p>
-                      <p className="text-xs text-green-600">+12.5%</p>
-                    </Card>
-                    <div className="flex h-24 items-end gap-1">
-                      {[40, 65, 45, 80, 55, 90, 70, 85].map((height, i) => (
-                        <div
-                          key={i}
-                          className="flex-1 rounded-t bg-blue-600"
-                          style={{ height: `${height}%` }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+      <section className="relative overflow-hidden px-6 py-32"><div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-violet-500/5 via-fuchsia-500/5 to-cyan-500/5" /><div className="pointer-events-none absolute left-1/2 top-1/2 h-[400px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-500/10 blur-3xl" /><div className="relative mx-auto max-w-2xl text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Ready to build something?</h2><p className="mx-auto mt-4 max-w-md text-base text-zinc-400">Join thousands of teams shipping dashboards and internal tools faster than ever.</p><div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"><Link href="/signup"><Button size="lg" data-test-id="landing-cta-signup" className="h-12 gap-2 bg-white px-8 text-base font-semibold text-black hover:bg-zinc-200">Start Building Free <ArrowRight size={16} /></Button></Link></div><p className="mt-4 text-xs text-zinc-600">No credit card required</p></div></section>
 
-            {/* Time Increase Card - Top Right */}
-            <Card className="absolute right-4 top-56 z-20 w-44 border-blue-900 bg-blue-900 p-4 shadow-xl">
-              <div className="flex items-center gap-2 mb-2">
-                <TrendingUp size={16} className="text-white" />
-                <span className="text-xs font-medium text-blue-200">Time increase</span>
-              </div>
-              <div className="flex h-16 items-end gap-1">
-                {[30, 50, 40, 70, 60, 85].map((height, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 rounded-t bg-blue-400"
-                    style={{ height: `${height}%` }}
-                  />
-                ))}
-              </div>
-              <p className="mt-2 text-2xl font-bold text-white">5<span className="text-sm">second</span></p>
-            </Card>
-
-            {/* User Count Card - Bottom Center */}
-            <Card className="absolute bottom-0 left-1/2 -translate-x-1/2 z-20 w-56 border-blue-100 bg-white p-4 shadow-xl">
-              <div className="flex items-center gap-3">
-                <div className="flex -space-x-2">
-                  <div className="h-10 w-10 rounded-full border-2 border-white bg-blue-400" />
-                  <div className="h-10 w-10 rounded-full border-2 border-white bg-blue-500" />
-                  <div className="h-10 w-10 rounded-full border-2 border-white bg-blue-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-blue-900">100K+</p>
-                  <p className="text-xs text-blue-600">SATISFIED USERS</p>
-                </div>
-              </div>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* ─── Trusted By ─────────────────────────────────── */}
-      <section className="border-y border-blue-200 bg-white/50 px-6 py-12">
-        <div className="mx-auto max-w-6xl">
-          <p className="mb-8 text-center text-xs font-semibold uppercase tracking-widest text-blue-400">
-            Trusted by teams at
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-4">
-            {["Acme Corp", "Globex", "Initech", "Hooli", "Piedmont"].map(
-              (name) => (
-                <span
-                  key={name}
-                  className="text-lg font-bold tracking-tight text-blue-300"
-                >
-                  {name}
-                </span>
-              )
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* ─── Features ───────────────────────────────────── */}
-      <section id="features" className="px-6 py-24">
-        <div className="mx-auto max-w-6xl">
-          <div className="text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-blue-900">
-              Everything you need to build fast
-            </h2>
-            <p className="mx-auto mt-4 max-w-xl text-base text-blue-700">
-              OpenDash combines AI intelligence with enterprise-grade
-              infrastructure so you can ship internal tools in minutes.
-            </p>
-          </div>
-
-          <div className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {FEATURES.map((feature) => (
-              <div
-                key={feature.title}
-                className="rounded-2xl border border-blue-100 bg-white p-6 shadow-lg hover:shadow-xl transition-shadow"
-              >
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
-                  {ICON_MAP[feature.icon] ?? <Bot size={24} />}
-                </div>
-                <h3 className="text-base font-semibold text-blue-900">
-                  {feature.title}
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-blue-700">
-                  {feature.description}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ─── How It Works ───────────────────────────────── */}
-      <section id="how-it-works" className="border-y border-blue-200 bg-white/50 px-6 py-24">
-        <div className="mx-auto max-w-6xl">
-          <div className="text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-blue-900">
-              Three steps to your app
-            </h2>
-            <p className="mx-auto mt-4 max-w-xl text-base text-blue-700">
-              No setup, no boilerplate, no deployment headaches.
-            </p>
-          </div>
-
-          <div className="mt-16 grid gap-8 sm:grid-cols-3">
-            {STEPS.map((step) => (
-              <div key={step.number} className="text-center">
-                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-lg font-bold text-white shadow-md">
-                  {step.number}
-                </div>
-                <h3 className="text-base font-semibold text-blue-900">
-                  {step.title}
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-blue-700">
-                  {step.description}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ─── Pricing ────────────────────────────────────── */}
-      <section id="pricing" className="px-6 py-24">
-        <div className="mx-auto max-w-6xl">
-          <div className="text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-blue-900">
-              Simple, transparent pricing
-            </h2>
-            <p className="mx-auto mt-4 max-w-xl text-base text-blue-700">
-              Start free. Scale when you are ready.
-            </p>
-          </div>
-
-          <div className="mx-auto mt-16 grid max-w-4xl gap-8 sm:grid-cols-2">
-            {/* Free tier */}
-            <div className="rounded-2xl border border-blue-200 bg-white p-8 shadow-lg hover:shadow-xl transition-shadow">
-              <h3 className="text-lg font-semibold text-blue-900">Free</h3>
-              <p className="mt-1 text-sm text-blue-600">
-                For individuals and small projects
-              </p>
-              <p className="mt-6">
-                <span className="text-4xl font-bold text-blue-900">$0</span>
-                <span className="text-sm text-blue-600"> / month</span>
-              </p>
-              <ul className="mt-8 space-y-3">
-                {[
-                  "Up to 3 projects",
-                  "AI builder access",
-                  "50+ components",
-                  "Community support",
-                ].map((item) => (
-                  <li
-                    key={item}
-                    className="flex items-center gap-2 text-sm text-blue-700"
-                  >
-                    <CheckCircle2 size={16} className="text-blue-400" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-              <Link href="/signup" className="mt-8 block">
-                <Button
-                  variant="outline"
-                  data-test-id="landing-pricing-free"
-                  className="w-full border-blue-300 font-medium hover:bg-blue-50"
-                >
-                  Get Started
-                </Button>
-              </Link>
-            </div>
-
-            {/* Pro tier */}
-            <div className="rounded-2xl border-2 border-blue-600 bg-white p-8 shadow-xl">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-blue-900">Pro</h3>
-                <span className="rounded-full bg-blue-600 px-3 py-0.5 text-xs font-medium text-white">
-                  Popular
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-blue-600">
-                For teams and production apps
-              </p>
-              <p className="mt-6">
-                <span className="text-4xl font-bold text-blue-900">$29</span>
-                <span className="text-sm text-blue-600"> / month</span>
-              </p>
-              <ul className="mt-8 space-y-3">
-                {[
-                  "Unlimited projects",
-                  "Priority AI access",
-                  "Custom domains",
-                  "Team collaboration",
-                  "Priority support",
-                  "Export to code",
-                ].map((item) => (
-                  <li
-                    key={item}
-                    className="flex items-center gap-2 text-sm text-blue-700"
-                  >
-                    <CheckCircle2 size={16} className="text-blue-600" />
-                    {item}
-                  </li>
-                ))}
-              </ul>
-              <Link href="/signup" className="mt-8 block">
-                <Button
-                  data-test-id="landing-pricing-pro"
-                  className="w-full bg-blue-600 font-medium text-white hover:bg-blue-700 shadow-md"
-                >
-                  Start Free Trial
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ─── CTA ────────────────────────────────────────── */}
-      <section className="border-t border-blue-200 bg-white/50 px-6 py-24">
-        <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-blue-900">
-            Ready to build your next app?
-          </h2>
-          <p className="mx-auto mt-4 max-w-xl text-base text-blue-700">
-            Join thousands of teams using OpenDash to ship internal tools,
-            dashboards, and admin panels faster than ever.
-          </p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <Link href="/signup">
-              <Button
-                size="lg"
-                data-test-id="landing-cta-signup"
-                className="h-12 bg-blue-600 px-8 text-base font-semibold text-white hover:bg-blue-700 shadow-lg hover:shadow-xl transition-shadow"
-              >
-                Start Building Free
-                <ArrowRight size={18} className="ml-2" />
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* ─── Footer ─────────────────────────────────────── */}
-      <footer className="border-t border-blue-200 bg-white px-6 py-16">
-        <div className="mx-auto max-w-6xl">
-          <div className="grid gap-8 sm:grid-cols-4">
-            {/* Brand */}
-            <div>
-              <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
-                  <LayoutDashboard size={14} className="text-white" />
-                </div>
-                <span className="text-sm font-bold">OpenDash</span>
-              </div>
-              <p className="mt-3 text-xs leading-relaxed text-blue-600">
-                The AI-powered web builder for teams that move fast.
-              </p>
-            </div>
-
-            {/* Link sections */}
-            {FOOTER_SECTIONS.map((section) => (
-              <div key={section.title}>
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-blue-400">
-                  {section.title}
-                </h4>
-                <ul className="mt-3 space-y-2">
-                  {section.links.map((link) => (
-                    <li key={link.label}>
-                      <a
-                        href={link.href}
-                        className="text-sm text-blue-600 transition-colors hover:text-blue-900"
-                        data-test-id={`landing-footer-${link.label.toLowerCase().replace(/\s+/g, '-')}`}
-                      >
-                        {link.label}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-12 border-t border-blue-100 pt-6 text-center text-xs text-blue-400">
-            &copy; {new Date().getFullYear()} OpenDash. All rights reserved.
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

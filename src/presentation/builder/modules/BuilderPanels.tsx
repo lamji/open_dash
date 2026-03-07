@@ -77,17 +77,17 @@ export function BuilderCodeEditorDialog({
       }}
     >
       <DialogContent
-        className="max-w-2xl p-0 overflow-hidden bg-[#1e1e1e] border border-slate-700 [&_[data-slot=dialog-close]]:text-white"
+        className="max-w-2xl overflow-hidden border border-slate-200 bg-white p-0 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.45)] [&_[data-slot=dialog-close]]:text-slate-500 [&_[data-slot=dialog-close]]:hover:text-slate-800"
         data-test-id="builder-css-editor-modal"
       >
         <DialogTitle className="sr-only">Edit Styles</DialogTitle>
-        <div className="flex items-center gap-0 bg-[#2d2d2d] border-b border-slate-700" data-test-id="builder-css-editor-titlebar">
-          <div className="flex items-center gap-1.5 px-3 py-2 bg-[#1e1e1e] border-r border-slate-700">
-            <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
-            <div className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
-            <div className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
+        <div className="flex items-center gap-0 border-b border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]" data-test-id="builder-css-editor-titlebar">
+          <div className="flex items-center gap-1.5 border-r border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="h-2.5 w-2.5 rounded-full bg-rose-300" />
+            <div className="h-2.5 w-2.5 rounded-full bg-amber-300" />
+            <div className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
           </div>
-          <span className="text-xs text-slate-400 px-3 py-2 font-mono">
+          <span className="px-4 py-3 text-xs font-mono text-slate-500">
             {cssEditorState?.slotIdx === -1
               ? "Block Container Styles (No widget selected)"
               : cssEditorState?.widgetTitle
@@ -104,10 +104,10 @@ export function BuilderCodeEditorDialog({
           }}
           data-test-id="builder-code-editor-tabs"
         >
-          <TabsList className="w-full justify-start rounded-none bg-[#2d2d2d] border-b border-slate-700 px-2 pt-1" data-test-id="builder-code-editor-tablist">
+          <TabsList className="w-full justify-start rounded-none border-b border-slate-200 bg-slate-50 px-2 pt-1" data-test-id="builder-code-editor-tablist">
             <TabsTrigger
               value="css"
-              className="text-xs data-[state=active]:bg-[#1e1e1e] data-[state=active]:text-slate-200 text-slate-500 rounded-t-sm px-3 py-1.5"
+              className="rounded-t-xl px-3 py-1.5 text-xs text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-800"
               data-test-id="builder-tab-css"
             >
               CSS
@@ -116,14 +116,14 @@ export function BuilderCodeEditorDialog({
               <>
                 <TabsTrigger
                   value="data"
-                  className="text-xs data-[state=active]:bg-[#1e1e1e] data-[state=active]:text-slate-200 text-slate-500 rounded-t-sm px-3 py-1.5"
+                  className="rounded-t-xl px-3 py-1.5 text-xs text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-800"
                   data-test-id="builder-tab-data"
                 >
                   Data
                 </TabsTrigger>
                 <TabsTrigger
                   value="function"
-                  className="text-xs data-[state=active]:bg-[#1e1e1e] data-[state=active]:text-slate-200 text-slate-500 rounded-t-sm px-3 py-1.5"
+                  className="rounded-t-xl px-3 py-1.5 text-xs text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-800"
                   data-test-id="builder-tab-function"
                 >
                   Function
@@ -138,14 +138,14 @@ export function BuilderCodeEditorDialog({
               onChange={(e) => setCssEditorDraft(e.target.value)}
               spellCheck={false}
               placeholder={"/* Add CSS declarations */\nbackground-color: #fff;\npadding: 16px;\nborder-radius: 8px;"}
-              className="w-full h-56 bg-[#1e1e1e] text-[#d4d4d4] font-mono text-sm px-4 py-4 resize-none outline-none placeholder:text-slate-600 border-0"
+              className="h-56 w-full resize-none border-0 bg-white px-4 py-4 font-mono text-sm text-slate-700 outline-none placeholder:text-slate-300"
               style={{ fontFamily: "'Fira Code', 'Cascadia Code', 'Consolas', monospace" }}
               data-test-id="builder-css-editor-textarea"
             />
-            <div className="flex items-center justify-between px-4 py-3 bg-[#2d2d2d] border-t border-slate-700">
-              <span className="text-[10px] text-slate-500 font-mono">CSS • Plain declarations only (no selectors)</span>
+            <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <span className="text-[10px] font-mono text-slate-400">CSS • Plain declarations only (no selectors)</span>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="ghost" onClick={closeCssEditor} className="text-slate-400" data-test-id="builder-css-editor-cancel-btn">Cancel</Button>
+                <Button size="sm" variant="ghost" onClick={closeCssEditor} className="text-slate-500 hover:text-slate-800" data-test-id="builder-css-editor-cancel-btn">Cancel</Button>
                 <Button
                   size="sm"
                   onClick={() => {
@@ -169,19 +169,19 @@ export function BuilderCodeEditorDialog({
               }}
               spellCheck={false}
               placeholder={"{\n  \"title\": \"My Widget\",\n  \"value\": \"$0\"\n}"}
-              className="w-full h-56 bg-[#1e1e1e] text-[#9cdcfe] font-mono text-sm px-4 py-4 resize-none outline-none placeholder:text-slate-600 border-0"
+              className="h-56 w-full resize-none border-0 bg-white px-4 py-4 font-mono text-sm text-sky-700 outline-none placeholder:text-slate-300"
               style={{ fontFamily: "'Fira Code', 'Cascadia Code', 'Consolas', monospace" }}
               data-test-id="builder-data-editor-textarea"
             />
             {dataJsonError && (
-              <div className="px-4 py-1.5 bg-[#1e1e1e] border-t border-red-800" data-test-id="builder-data-json-error">
-                <span className="text-[10px] text-red-400 font-mono">{dataJsonError}</span>
+              <div className="border-t border-rose-200 bg-rose-50 px-4 py-1.5" data-test-id="builder-data-json-error">
+                <span className="text-[10px] font-mono text-rose-600">{dataJsonError}</span>
               </div>
             )}
-            <div className="flex items-center justify-between px-4 py-3 bg-[#2d2d2d] border-t border-slate-700">
-              <span className="text-[10px] text-slate-500 font-mono">JSON • Widget data object</span>
+            <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <span className="text-[10px] font-mono text-slate-400">JSON • Widget data object</span>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="ghost" onClick={closeCssEditor} className="text-slate-400" data-test-id="builder-data-editor-cancel-btn">Cancel</Button>
+                <Button size="sm" variant="ghost" onClick={closeCssEditor} className="text-slate-500 hover:text-slate-800" data-test-id="builder-data-editor-cancel-btn">Cancel</Button>
                 <Button
                   size="sm"
                   onClick={async () => {
@@ -209,14 +209,14 @@ export function BuilderCodeEditorDialog({
               }}
               spellCheck={false}
               placeholder={"// Add JavaScript function code\nfunction processData(data) {\n  return data;\n}"}
-              className="w-full h-56 bg-[#1e1e1e] text-[#dcdcaa] font-mono text-sm px-4 py-4 resize-none outline-none placeholder:text-slate-600 border-0"
+              className="h-56 w-full resize-none border-0 bg-white px-4 py-4 font-mono text-sm text-amber-700 outline-none placeholder:text-slate-300"
               style={{ fontFamily: "'Fira Code', 'Cascadia Code', 'Consolas', monospace" }}
               data-test-id="builder-function-editor-textarea"
             />
-            <div className="flex items-center justify-between px-4 py-3 bg-[#2d2d2d] border-t border-slate-700">
-              <span className="text-[10px] text-slate-500 font-mono">JavaScript • Widget function code</span>
+            <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <span className="text-[10px] font-mono text-slate-400">JavaScript • Widget function code</span>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="ghost" onClick={closeCssEditor} className="text-slate-400" data-test-id="builder-function-editor-cancel-btn">Cancel</Button>
+                <Button size="sm" variant="ghost" onClick={closeCssEditor} className="text-slate-500 hover:text-slate-800" data-test-id="builder-function-editor-cancel-btn">Cancel</Button>
                 <Button
                   size="sm"
                   onClick={async () => {
@@ -287,16 +287,18 @@ export function BuilderAiChatPanel({
 
   return (
     <div
-      className="fixed right-0 top-0 h-full w-80 bg-white border-l border-slate-200 shadow-2xl flex flex-col z-50"
+      className="fixed right-0 top-0 z-50 flex h-full w-80 flex-col border-l border-slate-200 bg-white shadow-[0_24px_60px_-32px_rgba(15,23,42,0.45)]"
       data-test-id="builder-ai-chat-panel"
     >
-      <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] px-4 py-4">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-2xl bg-blue-600 text-white">
+            <Sparkles className="h-4 w-4" />
+          </div>
           <div>
-            <p className="text-sm font-semibold">AI Builder Assistant</p>
+            <p className="text-sm font-semibold text-slate-900">AI Assistant</p>
             {groqChatContext && (
-              <p className="text-[10px] opacity-80">
+              <p className="text-[10px] text-slate-500">
                 {groqChatContext.blockType} · {groqChatContext.slotIdx < 0 ? "wrapper" : `col ${groqChatContext.slotIdx + 1}`}
               </p>
             )}
@@ -304,7 +306,7 @@ export function BuilderAiChatPanel({
         </div>
         <button
           onClick={closeGroqChat}
-          className="text-white/70 hover:text-white"
+          className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
           data-test-id="builder-ai-chat-close-btn"
         >
           <X className="w-4 h-4" />
@@ -312,16 +314,16 @@ export function BuilderAiChatPanel({
       </div>
 
       {groqChatContext?.currentCss && (
-        <div className="px-3 py-2 bg-slate-900 border-b border-slate-700">
-          <p className="text-[10px] text-slate-400 font-mono mb-1">Current styles:</p>
-          <p className="text-[10px] text-green-400 font-mono truncate">{groqChatContext.currentCss}</p>
+        <div className="border-b border-slate-200 bg-slate-50 px-3 py-3">
+          <p className="mb-1 text-[10px] font-mono text-slate-400">Current styles:</p>
+          <p className="truncate rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[10px] font-mono text-slate-600">{groqChatContext.currentCss}</p>
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+      <div className="flex-1 space-y-3 overflow-y-auto px-3 py-4">
         {groqMessages.length === 0 && (
-          <div className="text-center text-xs text-slate-400 mt-8">
-            <Sparkles className="w-6 h-6 mx-auto mb-2 text-purple-400" />
+          <div className="mt-8 text-center text-xs text-slate-400">
+            <Sparkles className="mx-auto mb-2 h-6 w-6 text-blue-500" />
             <p>Ask for styles, data, config, or guidance.</p>
             <p className="mt-1 text-slate-500">Try: &quot;how to align this right?&quot; or &quot;/data change label to Save&quot;</p>
           </div>
@@ -334,12 +336,12 @@ export function BuilderAiChatPanel({
           return (
             <div
               key={i}
-              className={`text-xs rounded-lg px-3 py-2 whitespace-pre-wrap ${
+              className={`whitespace-pre-wrap rounded-2xl px-3 py-2 text-xs ${
                 msg.role === "user"
-                  ? "bg-blue-600 text-white ml-4"
+                  ? "ml-4 bg-blue-600 text-white"
                   : isCssLikeAssistantResponse
-                    ? "bg-slate-900 text-green-400 font-mono mr-4"
-                    : "bg-slate-100 text-slate-700 mr-4"
+                    ? "mr-4 border border-slate-200 bg-slate-900 font-mono text-green-400"
+                    : "mr-4 border border-slate-200 bg-slate-50 text-slate-700"
               }`}
               data-test-id={`builder-ai-chat-msg-${i}`}
             >
@@ -354,7 +356,7 @@ export function BuilderAiChatPanel({
         )}
       </div>
 
-      <div className="flex items-center gap-2 px-3 py-3 border-t border-slate-200 relative">
+      <div className="relative flex items-center gap-2 border-t border-slate-200 bg-white px-3 py-3">
         <Input
           ref={groqInputRef}
           value={groqInput}
@@ -389,13 +391,13 @@ export function BuilderAiChatPanel({
             }
           }}
           placeholder="e.g. /styles bg blue, /data change label, /help how to align right?"
-          className="flex-1 text-xs h-8"
+          className="h-10 flex-1 rounded-full border-slate-200 bg-slate-50 px-4 text-xs"
           data-test-id="builder-ai-chat-input"
           autoFocus
         />
 
         {slashMenuOpen && (
-          <div className="absolute bottom-10 left-3 bg-white border border-slate-200 rounded-lg shadow-lg z-50 w-48">
+          <div className="absolute bottom-12 left-3 z-50 w-48 rounded-2xl border border-slate-200 bg-white p-1 shadow-lg">
             {slashCommands.map((cmd, idx) => (
               <button
                 key={cmd.label}
@@ -403,7 +405,8 @@ export function BuilderAiChatPanel({
                   setGroqInput(`${cmd.label} `);
                   setSlashMenuOpen(false);
                 }}
-                className={`w-full text-left px-3 py-2 text-xs transition-colors ${idx === slashMenuHighlighted ? "bg-blue-50 text-blue-700 font-medium" : "hover:bg-slate-50 text-slate-700"}`}
+                className={`w-full rounded-xl px-3 py-2 text-left text-xs transition-colors ${idx === slashMenuHighlighted ? "bg-blue-50 font-medium text-blue-700" : "text-slate-700 hover:bg-slate-50"}`}
+                data-test-id={`builder-ai-chat-slash-${cmd.label.replace("/", "")}`}
               >
                 <span className="font-mono font-bold">{cmd.label}</span>
                 <span className="text-slate-500 ml-2">{cmd.desc}</span>
@@ -413,7 +416,7 @@ export function BuilderAiChatPanel({
         )}
         <Button
           size="sm"
-          className="h-8 w-8 p-0 bg-purple-600 hover:bg-purple-700"
+          className="h-10 w-10 rounded-full bg-blue-600 p-0 hover:bg-blue-700"
           disabled={!groqInput.trim() || groqChatLoading}
           onClick={() => {
             sendGroqMessage(groqInput);

@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     description: "An open-source AI-powered admin dashboard. Build your admin with natural language.",
     images: [
       {
-        url: "/open-dash.png",
+        url: "/preview.png",
         width: 1200,
         height: 630,
         alt: "OpenDash - Build Admin Dashboards with AI",
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "OpenDash — AI-Powered Admin",
     description: "An open-source AI-powered admin dashboard. Build your admin with natural language.",
-    images: ["/open-dash.png"],
+    images: ["/preview.png"],
   },
   icons: {
     icon: [

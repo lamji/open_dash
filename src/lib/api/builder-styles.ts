@@ -9,6 +9,7 @@ export interface SaveBlockStylesResponse {
   ok: boolean;
   layoutId?: string;
   error?: string;
+  status?: number;
 }
 
 export interface GenerateAiStyleResponse {
@@ -51,11 +52,12 @@ export async function saveBlockStyles(
     const text = await res.text();
     if (!text || !text.trim()) {
       console.warn(`Debug flow: saveBlockStyles empty response body`, { status: res.status });
-      return { ok: res.ok };
+      return { ok: res.ok, status: res.status };
     }
     const data = JSON.parse(text) as SaveBlockStylesResponse;
-    console.log(`Debug flow: saveBlockStyles response`, { ok: data.ok, layoutId: data.layoutId });
-    return data;
+    const result = { ...data, ok: data.ok ?? res.ok, status: res.status };
+    console.log(`Debug flow: saveBlockStyles response`, { ok: result.ok, layoutId: result.layoutId, status: result.status });
+    return result;
   } catch (err) {
     console.error(`Debug flow: saveBlockStyles error`, err);
     return { ok: false, error: err instanceof Error ? err.message : "Unknown error" };
