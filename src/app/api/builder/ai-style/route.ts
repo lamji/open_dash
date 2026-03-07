@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Groq from "groq-sdk";
 import type { GroqChatMessage } from "@/domain/builder/types";
+import { buildWidgetSpecPrompt, getWidgetSpec } from "@/lib/widget-spec-registry";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -9,93 +10,65 @@ interface ClarificationDecision {
   clarificationQuestion?: string;
 }
 
-function buildWidgetVisualDescription(
-  widgetId: string,
-  category: string,
-  widgetData: Record<string, unknown>
-): string {
-  const slug = widgetId;
-  const lines: string[] = ["VISUAL STRUCTURE:"];
+interface WidgetInfo {
+  widgetId: string;
+  category: string;
+  title: string;
+  widgetData: Record<string, unknown>;
+}
 
-  // Category-level descriptions
-  const categoryDescriptions: Record<string, string> = {
-    stats: "Renders a stat card with a large value, label text, change indicator (up/down arrow), and period text. Uses Tailwind text classes for sizing.",
-    charts: "",
-    progress: "Renders progress bars using shadcn <Progress> component with percentage labels.",
-    activity: "Renders a vertical feed of items, each with a colored dot indicator, text, and timestamp.",
-    comparison: "Renders comparison cards with current vs previous values and up/down trend arrows.",
-    health: "Renders service status items with colored dot indicators (green=operational, yellow=degraded).",
-    timeline: "Renders a vertical timeline with colored dots and border-left connectors.",
-    list: "Renders ranked/scored items with progress bars or inline bar charts.",
-    table: "Renders a <table> with thead/tbody, using Tailwind table-fixed and text-xs classes.",
-    funnel: "Renders horizontal funnel bars with percentage widths and gradient backgrounds.",
-    leaderboard: "Renders ranked entries with avatar circles, names, scores, and trophy icons.",
-    summary: "Renders a 2-column grid of KPI cards with labels, values, and trend indicators.",
-    button: "Renders button elements with Tailwind bg-blue-600 text-white and variant styles.",
-    dropdown: "Renders select triggers with option lists, using border/rounded-lg styling.",
-    menu: "Renders navigation items with icons, labels, and active state highlighting.",
-    search: "Renders search input fields with icons, keyboard shortcuts, and filter chips.",
-    form: "Renders form fields with labels, inputs, and helper text.",
-  };
+const COLOR_STYLE_PROPS = new Set([
+  "color",
+  "background",
+  "background-color",
+  "border-color",
+  "outline-color",
+  "text-decoration-color",
+  "fill",
+  "stroke",
+  "caret-color",
+]);
 
-  // Widget-specific visual descriptions
-  const widgetDescriptions: Record<string, string> = {
-    "revenue-chart": "Bar chart: vertical bars using flex items-end, each bar has inline style height (percentage) and background (hsl gradient). Labels below.",
-    "activity-chart": "Bar chart: dense vertical bars with bg-gradient-to-t from-blue-600 to-blue-300. Height set via inline style percentage.",
-    "traffic-pie": "Pie chart: circular div with conic-gradient() built from segments[].color (hex). Legend items with colored dots beside it.",
-    "donut-budget": "Donut chart: circular div with conic-gradient() and an inner white circle (absolute inset-2). Legend shows top 3 segments.",
-    "heatmap": "Grid of colored squares (grid-cols-7), colors from palette[] array as Tailwind bg classes.",
-    "line-trend": "Area/bar visualization: vertical bars with bg-emerald-400 rounded-t-sm, height from percentage of max value.",
-    "area-traffic": "Area visualization: vertical bars with bg-gradient-to-t from-cyan-600 to-cyan-200.",
-    "horizontal-bar": "Horizontal bars: bg-slate-100 track with bg-violet-500 fill, width set by percentage.",
-    "stacked-bar": "Stacked vertical bars: flex-col-reverse groups, each segment colored (bg-violet-500, bg-blue-400, bg-cyan-400).",
-    "channel-attribution": "Horizontal bars with inline background color from channels[].color (hex values).",
-    "region-breakdown": "Horizontal bars with inline background color from regions[].color (hex values).",
-    "weekly-summary": "2-column grid of colored metric cards. Colors from colorMap: blue/emerald/violet/orange mapped to bg-*-50 text-*-700.",
-    "executive-summary": "2-column grid of KPI cards (bg-slate-50 rounded-lg) with trend indicators (text-emerald-600 or text-red-500).",
-    "monthly-metrics": "2-column grid of metric cards (bg-slate-50) with label and bold value.",
-    "conversion-funnel": "Horizontal funnel bars with bg-gradient-to-r from-amber-400 to-amber-300, width = pct%.",
-    "sales-pipeline": "Horizontal funnel bars with hsl() computed backgrounds getting darker per stage.",
-  };
+function normalizeBareHexForColorProperty(prop: string, val: string): string {
+  console.log(`Debug flow: normalizeBareHexForColorProperty fired with`, { prop, val });
+  if (!COLOR_STYLE_PROPS.has(prop)) {
+    return val;
+  }
+  const trimmed = val.trim();
+  if (trimmed.startsWith("#")) {
+    return trimmed;
+  }
+  const bareHexMatch = trimmed.match(/^([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/);
+  const result = bareHexMatch ? `#${bareHexMatch[1]}` : trimmed;
+  console.log(`Debug flow: normalizeBareHexForColorProperty result`, { result });
+  return result;
+}
 
-  if (categoryDescriptions[category]) {
-    lines.push(`Category "${category}": ${categoryDescriptions[category]}`);
+function sanitizeGeneratedCss(css: string): string {
+  console.log(`Debug flow: sanitizeGeneratedCss fired with`, { cssLength: css.length });
+  if (!css.trim()) {
+    return css;
   }
-  if (widgetDescriptions[slug]) {
-    lines.push(`Widget "${slug}": ${widgetDescriptions[slug]}`);
-  }
-
-  // Add color information from widgetData
-  if (widgetData.segments && Array.isArray(widgetData.segments)) {
-    const segs = widgetData.segments as { color?: string; label?: string }[];
-    const colors = segs.filter(s => s.color).map(s => `${s.label}: ${s.color}`);
-    if (colors.length > 0) {
-      lines.push(`Current chart colors: ${colors.join(", ")}`);
-    }
-  }
-  if (widgetData.palette && Array.isArray(widgetData.palette)) {
-    lines.push(`Current palette classes: ${(widgetData.palette as string[]).join(", ")}`);
-  }
-  if (widgetData.channels && Array.isArray(widgetData.channels)) {
-    const chs = widgetData.channels as { color?: string; label?: string }[];
-    const colors = chs.filter(c => c.color).map(c => `${c.label}: ${c.color}`);
-    if (colors.length > 0) {
-      lines.push(`Current channel colors: ${colors.join(", ")}`);
-    }
-  }
-  if (widgetData.regions && Array.isArray(widgetData.regions)) {
-    const regs = widgetData.regions as { color?: string; name?: string }[];
-    const colors = regs.filter(r => r.color).map(r => `${r.name}: ${r.color}`);
-    if (colors.length > 0) {
-      lines.push(`Current region colors: ${colors.join(", ")}`);
-    }
-  }
-
-  // General structure info
-  lines.push("Outer wrapper: flex flex-col h-full gap-2 (fills parent container).");
-  lines.push("Title row: text-sm font-bold text-slate-800 with a Lucide icon (w-4 h-4).");
-
-  return lines.join("\n");
+  const normalized = css
+    .replace(/,\s*\n\s*/g, "; ")
+    .replace(/\n\s*/g, "; ")
+    .replace(/\r/g, "");
+  const declarations: string[] = [];
+  normalized.split(";").forEach((decl) => {
+    const colonIdx = decl.indexOf(":");
+    if (colonIdx === -1) return;
+    const prop = decl.slice(0, colonIdx).trim().toLowerCase();
+    const rawVal = decl.slice(colonIdx + 1).trim();
+    if (!prop || !rawVal) return;
+    const val = normalizeBareHexForColorProperty(prop, rawVal);
+    declarations.push(`${prop}: ${val}`);
+  });
+  const result = declarations.join("; ");
+  console.log(`Debug flow: sanitizeGeneratedCss result`, {
+    declarationCount: declarations.length,
+    resultLength: result.length,
+  });
+  return result;
 }
 
 function detectAmbiguousStyleIntent(
@@ -148,6 +121,38 @@ function detectAmbiguousStyleIntent(
   return result;
 }
 
+function detectNonStyleContractIntent(
+  message: string,
+  widget?: WidgetInfo
+): ClarificationDecision {
+  if (!widget) {
+    return { needsClarification: false };
+  }
+
+  const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
+  const widgetSpec = getWidgetSpec(widget.widgetId, widget.category, widget.widgetData);
+  const asksForIcon = /\bicon\b/.test(normalized);
+  const asksForConfig = /\b(config|configure|feature|features|pagination|sorting|filter|columns?|settings?)\b/.test(normalized);
+  const asksForData = /\b(label|title|value|values|text|progress|target|current|goal|goals|item|items|row|rows|status|placeholder)\b/.test(normalized);
+  const asksForCss = /\b(background|padding|margin|border|shadow|radius|align|justify|display|position|width|height|font|text-align|color)\b/.test(normalized);
+
+  if (asksForIcon || (asksForConfig && !asksForCss)) {
+    return {
+      needsClarification: true,
+      clarificationQuestion: `That request belongs to ${asksForConfig ? "/config" : "/data"}, not /styles. Follow the selected widget contract: ${widgetSpec.configExamples[0] ?? widgetSpec.dataExamples[0] ?? "use the matching command mode"}`,
+    };
+  }
+
+  if (asksForData && !asksForCss) {
+    return {
+      needsClarification: true,
+      clarificationQuestion: `That request changes widget internals, not wrapper CSS. Use /data based on the selected widget contract: ${widgetSpec.dataExamples[0] ?? "/data update an allowed widget field"}`,
+    };
+  }
+
+  return { needsClarification: false };
+}
+
 export async function POST(request: NextRequest) {
   console.log(`Debug flow: POST /api/builder/ai-style fired`);
 
@@ -160,12 +165,7 @@ export async function POST(request: NextRequest) {
       currentCss: string;
       message: string;
       history: GroqChatMessage[];
-      widget?: {
-        widgetId: string;
-        category: string;
-        title: string;
-        widgetData: Record<string, unknown>;
-      };
+	      widget?: WidgetInfo;
       mode?: "styles";
       promptContext?: string;
     };
@@ -175,24 +175,35 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`Debug flow: POST /api/builder/ai-style params`, { blockId, slotIdx, blockType, currentCss, widget, hasPromptContext: !!promptContext });
-    const clarificationDecision = detectAmbiguousStyleIntent(message, widget?.category);
-    if (clarificationDecision.needsClarification) {
+	    const clarificationDecision = detectAmbiguousStyleIntent(message, widget?.category);
+	    if (clarificationDecision.needsClarification) {
       return NextResponse.json({
         ok: true,
         needsClarification: true,
         clarificationQuestion: clarificationDecision.clarificationQuestion,
-      });
-    }
+	      });
+	    }
+	    const nonStyleDecision = detectNonStyleContractIntent(message, widget);
+	    if (nonStyleDecision.needsClarification) {
+	      return NextResponse.json({
+	        ok: true,
+	        needsClarification: true,
+	        clarificationQuestion: nonStyleDecision.clarificationQuestion,
+	      });
+	    }
 
     const isBlockLevel = slotIdx < 0;
     const targetLabel = isBlockLevel
       ? `block wrapper for block ${blockId}`
       : `column ${slotIdx + 1} of block ${blockId}`;
-    const targetElementId = isBlockLevel
-      ? `builder-block-${blockId}`
-      : `builder-slot-${blockId}-${slotIdx}`;
+	    const targetElementId = isBlockLevel
+	      ? `builder-block-${blockId}`
+	      : `builder-slot-${blockId}-${slotIdx}`;
+	    const widgetSpec = !isBlockLevel && widget
+	      ? getWidgetSpec(widget.widgetId, widget.category, widget.widgetData)
+	      : null;
 
-    const widgetInfo = !isBlockLevel && widget ? `
+	    const widgetInfo = !isBlockLevel && widget ? `
 
 WIDGET CONTENT:
 This column contains a "${widget.title}" widget (ID: ${widget.widgetId}, Category: ${widget.category}).
@@ -200,7 +211,7 @@ This column contains a "${widget.title}" widget (ID: ${widget.widgetId}, Categor
 WIDGET DATA (all configurable properties):
 ${JSON.stringify(widget.widgetData, null, 2)}
 
-${buildWidgetVisualDescription(widget.widgetId, widget.category, widget.widgetData)}
+${widgetSpec ? buildWidgetSpecPrompt(widgetSpec) : ""}
 
 STYLING CAPABILITIES:
 - You style the CONTAINER wrapping this widget. CSS you output is applied to the column div.
@@ -214,8 +225,8 @@ STYLING CAPABILITIES:
   - Example: "display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 16px;"
 - Color theming: background-color, background-image (gradients), color (text)
 - The widget renders INSIDE this container using Tailwind classes and inline styles.
-- Chart colors come from widgetData (segments[].color as hex, or inline hsl() in bars). To change chart colors, the widgetData must be updated — container CSS alone cannot override inline styles on inner elements.
-- Progress bars use shadcn <Progress> component.` : `
+- If the selected widget contract says an internal visual change belongs to widget data or config, do not fake it with wrapper CSS.
+- If the requested change targets chart colors, progress internals, labels, values, or icons, refuse here and tell the user to use /data or /config based on the contract.` : `
 
 ${isBlockLevel ? "You are styling the OUTER BLOCK WRAPPER, not an inner column." : "This column is currently EMPTY (no widget placed yet). You can style it with any CSS properties."}
 
@@ -257,7 +268,8 @@ Rules:
 3. If the user asks to change a property that already exists in Current CSS, include the updated value.
 4. If the user asks to "revert", "remove", or "clear" styles, output ALL current properties with empty string values (e.g.: background-color: ; padding: ;).
 5. Output only the properties that need to be added, changed, or removed.
-6. Remember: You are styling ${targetLabel}. These styles will ONLY affect this specific ${isBlockLevel ? "block wrapper" : "column"}.`;
+6. Remember: You are styling ${targetLabel}. These styles will ONLY affect this specific ${isBlockLevel ? "block wrapper" : "column"}.
+7. If the user asks for an internal widget change covered by the selected widget contract, do not guess with CSS. Return a short refusal as CSS cannot perform that change.`;
 
     const messages: Groq.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: systemPrompt },
@@ -273,9 +285,14 @@ Rules:
     });
 
     const css = completion.choices[0]?.message?.content?.trim() ?? "";
-    console.log(`Debug flow: POST /api/builder/ai-style groq response`, { css });
+    const sanitizedCss = sanitizeGeneratedCss(css);
+    console.log(`Debug flow: POST /api/builder/ai-style groq response`, {
+      css,
+      sanitizedCss,
+      wasSanitized: css !== sanitizedCss,
+    });
 
-    return NextResponse.json({ ok: true, css });
+    return NextResponse.json({ ok: true, css: sanitizedCss || css });
   } catch (err) {
     console.error(`Debug flow: POST /api/builder/ai-style error`, err);
     return NextResponse.json({ ok: false, error: "AI style generation failed" }, { status: 500 });

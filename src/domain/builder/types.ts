@@ -19,6 +19,13 @@ export interface BuilderPromptWidgetContext {
   title: string;
   widgetData: Record<string, unknown>;
   functionCode?: string;
+  slotCss?: string;
+  blockCss?: string;
+  widgetDataKeys?: string[];
+  widgetDataPaths?: string[];
+  configFieldPaths?: string[];
+  iconFieldPaths?: string[];
+  iconCandidates?: string[];
 }
 
 export interface BuilderPromptContextSnapshot {
@@ -110,6 +117,21 @@ export interface DashboardLayoutRecord {
   layout: LayoutBlock[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BuilderDraftPayload {
+  version: 1;
+  projectId: string;
+  layoutId: string | null;
+  blocks: LayoutBlock[];
+  savedAt: string;
+}
+
+export interface BuilderAutosaveState {
+  hasUnsavedChanges: boolean;
+  isDraftSavedLocally: boolean;
+  isAutosaving: boolean;
+  lastSavedAt: string | null;
 }
 
 export interface NavItem {

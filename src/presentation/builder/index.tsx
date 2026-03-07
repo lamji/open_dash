@@ -33,6 +33,8 @@ import type { WidgetTemplate as WidgetTemplateWithDates } from "@/presentation/w
 import { GridPlyaGroundModal, getGridPlaygroundSlotPlacement } from "@/components/gridPlyaGround";
 import { LAYOUT_OPTIONS, SIDEBAR_CATEGORIES } from "./builder.constants";
 import {
+  buildWidgetElementOverrideCss,
+  buildWidgetThemeOverrideCss,
   cssStringToStyle,
   findBlock,
   getBlockContainerClass,
@@ -68,6 +70,7 @@ export default function BuilderShell() {
     variantTemplates,
     previewMode,
     savingLayout,
+    autosaveState,
     projectId,
     cssEditorState,
     codeEditorTab,
@@ -176,6 +179,30 @@ export default function BuilderShell() {
     };
   }, [blocks, previewMode]);
 
+  useEffect(() => {
+    console.log(`Debug flow: builder beforeunload effect fired with`, {
+      isDraftSavedLocally: autosaveState.isDraftSavedLocally,
+      isAutosaving: autosaveState.isAutosaving,
+      savingLayout,
+    });
+    const shouldBlockUnload =
+      savingLayout ||
+      autosaveState.isAutosaving ||
+      !autosaveState.isDraftSavedLocally;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      console.log(`Debug flow: handleBeforeUnload fired with`, { shouldBlockUnload });
+      if (!shouldBlockUnload) {
+        return;
+      }
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [autosaveState.isAutosaving, autosaveState.isDraftSavedLocally, savingLayout]);
+
   const handleAddWidget = (blockId: string, slotIdx: number) => {
     console.log(`Debug flow: handleAddWidget fired with`, { blockId, slotIdx });
     setSelectedSlot({ blockId, slotIdx });
@@ -256,6 +283,9 @@ export default function BuilderShell() {
     const childBlocks = slot.childBlocks ?? [];
     const rawSlotCss = block.columnStyles?.[slotIdx];
     const slotStyle = cssStringToStyle(rawSlotCss ?? "");
+    const widgetElementOverrideCss = buildWidgetElementOverrideCss(rawSlotCss ?? "");
+    const widgetStyleScope = `builder-slot-widget-${block.id}-${slotIdx}`;
+    const widgetThemeOverrideCss = buildWidgetThemeOverrideCss(rawSlotCss ?? "", widgetStyleScope);
     const slotPlacementStyle = getGridPlaygroundSlotPlacement(block, slotIdx);
     const hasCustomStyle = Object.keys(slotStyle).length > 0;
     const hasChildren = childBlocks.length > 0;
@@ -324,6 +354,16 @@ export default function BuilderShell() {
 
         {widget && (
           <div className="flex flex-col h-full" data-test-id={`builder-slot-filled-${block.id}-${slotIdx}`}>
+            {widgetElementOverrideCss && (
+              <style data-test-id={`builder-slot-widget-style-${block.id}-${slotIdx}`}>
+                {`[data-test-id="${widgetStyleScope}"] { ${widgetElementOverrideCss} }`}
+              </style>
+            )}
+            {widgetThemeOverrideCss && (
+              <style data-test-id={`builder-slot-widget-theme-style-${block.id}-${slotIdx}`}>
+                {widgetThemeOverrideCss}
+              </style>
+            )}
             {!previewMode && (
               <div className={`flex mb-2 flex-shrink-0 ${isCompactSlot ? "items-center justify-end" : "items-center justify-between"}`} data-test-id={`builder-slot-header-${block.id}-${slotIdx}`}>
                 {!isCompactSlot && <span className="text-xs font-semibold text-slate-500 truncate">{widget.title}</span>}
@@ -570,6 +610,24 @@ export default function BuilderShell() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <div className="min-w-[140px] text-right" data-test-id="builder-save-status">
+              <p className="text-[11px] font-medium text-slate-500">
+                {savingLayout
+                  ? "Saving layout..."
+                  : autosaveState.isAutosaving
+                    ? "Autosaving..."
+                    : autosaveState.hasUnsavedChanges
+                      ? "Unsaved changes"
+                      : "All changes saved"}
+              </p>
+              <p className="text-[10px] text-slate-400">
+                {autosaveState.isDraftSavedLocally
+                  ? autosaveState.lastSavedAt
+                    ? `Draft saved ${new Date(autosaveState.lastSavedAt).toLocaleTimeString()}`
+                    : "Draft saved in database"
+                  : "Saving draft to database..."}
+              </p>
+            </div>
             <Button
               size="sm"
               variant="ghost"

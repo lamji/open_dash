@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryProvider } from "@/components/providers/query-provider";
@@ -58,6 +59,7 @@ export default function RootLayout({
           <TooltipProvider delayDuration={300}>
             {children}
             <Toaster />
+            <Analytics />
           </TooltipProvider>
         </QueryProvider>
       </body>

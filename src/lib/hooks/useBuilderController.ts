@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { io } from "socket.io-client";
@@ -14,10 +14,11 @@ import type {
   GroqStyleContext,
   GroqChatMessage,
   CodeEditorTab,
+  BuilderAutosaveState,
 } from "@/domain/builder/types";
 import { BUILDER_CACHE_INVALIDATE_EVENT } from "@/domain/cache/types";
 import type { WidgetTemplate } from "@/domain/widgets/types";
-import { saveLayout as saveLayoutApi, getWidgets } from "@/lib/api/builder-layouts";
+import { saveLayout as saveLayoutApi, getLayout, getWidgets } from "@/lib/api/builder-layouts";
 import { createNavItem, getNavItems, deleteNavItem } from "@/lib/api/builder-nav";
 import { bootstrapSocketServer, generateAiWidgetRequest, postBuilderLog } from "@/lib/api/builder-runtime";
 import { saveBlockStyles, generateAiStyle, generateAiWidgetUpdate, generateAiAssistant, saveWidgetData as saveWidgetDataApi, saveGridRatio as saveGridRatioApi } from "@/lib/api/builder-styles";
@@ -171,6 +172,53 @@ const ASSISTANT_INTENT_PREFIXES = [
   "when",
   "help",
 ];
+
+const BUILDER_AUTOSAVE_DELAY_MS = 1500;
+
+async function fetchBuilderLayoutState(projectId: string): Promise<{
+  draftLayoutId: string | null;
+  publishedLayoutId: string | null;
+  lastPublishedAt: string | null;
+}> {
+  console.log(`Debug flow: fetchBuilderLayoutState fired with`, { projectId });
+  if (!projectId) {
+    return { draftLayoutId: null, publishedLayoutId: null, lastPublishedAt: null };
+  }
+  const res = await fetch(`/api/config/builder_layout_state?projectId=${projectId}`);
+  if (!res.ok) {
+    return { draftLayoutId: null, publishedLayoutId: null, lastPublishedAt: null };
+  }
+  const payload = await res.json() as {
+    draftLayoutId?: string | null;
+    publishedLayoutId?: string | null;
+    lastPublishedAt?: string | null;
+  } | null;
+  return {
+    draftLayoutId: payload?.draftLayoutId ?? null,
+    publishedLayoutId: payload?.publishedLayoutId ?? null,
+    lastPublishedAt: payload?.lastPublishedAt ?? null,
+  };
+}
+
+async function saveBuilderLayoutState(
+  projectId: string,
+  state: {
+    draftLayoutId: string | null;
+    publishedLayoutId?: string | null;
+    lastPublishedAt?: string | null;
+  }
+): Promise<boolean> {
+  console.log(`Debug flow: saveBuilderLayoutState fired with`, { projectId, state });
+  if (!projectId) {
+    return false;
+  }
+  const res = await fetch(`/api/config/builder_layout_state?projectId=${projectId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(state),
+  });
+  return res.ok;
+}
 
 function detectButtonWidgetDataIntent(messageLower: string): boolean {
   console.log(`Debug flow: detectButtonWidgetDataIntent fired with`, { messageLower });
@@ -345,7 +393,22 @@ export function useBuilder() {
   const [layoutId, setLayoutId] = useState<string | null>(null);
   const [dataJsonError, setDataJsonError] = useState<string | null>(null);
   const [gridRatioModal, setGridRatioModal] = useState<{blockId: string} | null>(null);
+  const [autosaveState, setAutosaveState] = useState<BuilderAutosaveState>({
+    hasUnsavedChanges: false,
+    isDraftSavedLocally: true,
+    isAutosaving: false,
+    lastSavedAt: null,
+  });
   const { buildPromptContext } = useBuilderPromptContext(blocks);
+  const draftHydratedRef = useRef(false);
+  const lastTrackedBlocksSignatureRef = useRef("[]");
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestBlocksRef = useRef<LayoutBlock[]>(blocks);
+  const latestLayoutIdRef = useRef<string | null>(layoutId);
+  const blocksSignature = useMemo(() => JSON.stringify(blocks), [blocks]);
+
+  latestBlocksRef.current = blocks;
+  latestLayoutIdRef.current = layoutId;
 
   const navItemsQuery = useQuery({
     queryKey: navItemsQueryKey,
@@ -438,6 +501,177 @@ export function useBuilder() {
       socket?.close();
     };
   }, [projectId, queryClient]);
+
+  useEffect(() => {
+    console.log(`Debug flow: builder draft restore effect fired with`, { projectId });
+    let cancelled = false;
+    const restoreBuilderDraft = async () => {
+      if (!projectId) {
+        setBlocks([]);
+        setLayoutId(null);
+        draftHydratedRef.current = true;
+        lastTrackedBlocksSignatureRef.current = JSON.stringify([]);
+        return;
+      }
+      try {
+        const builderLayoutState = await fetchBuilderLayoutState(projectId);
+        if (cancelled) {
+          return;
+        }
+        if (!builderLayoutState.draftLayoutId) {
+          setBlocks([]);
+          setLayoutId(null);
+          draftHydratedRef.current = true;
+          lastTrackedBlocksSignatureRef.current = JSON.stringify([]);
+          setAutosaveState((prev) => ({
+            ...prev,
+            hasUnsavedChanges: false,
+            isDraftSavedLocally: true,
+          }));
+          return;
+        }
+        const layoutResult = await getLayout(builderLayoutState.draftLayoutId);
+        if (cancelled) {
+          return;
+        }
+        if (!layoutResult.ok || !layoutResult.layout) {
+          setBlocks([]);
+          setLayoutId(null);
+          draftHydratedRef.current = true;
+          lastTrackedBlocksSignatureRef.current = JSON.stringify([]);
+          return;
+        }
+        const restoredBlocks = normalizeBlocks(layoutResult.layout.layout ?? []);
+        const restoredSignature = JSON.stringify(restoredBlocks);
+        console.log(`Debug flow: builder draft restored`, {
+          projectId,
+          layoutId: builderLayoutState.draftLayoutId,
+          blockCount: restoredBlocks.length,
+        });
+        lastTrackedBlocksSignatureRef.current = restoredSignature;
+        setBlocks(restoredBlocks);
+        setLayoutId(builderLayoutState.draftLayoutId);
+        setAutosaveState({
+          hasUnsavedChanges: false,
+          isDraftSavedLocally: true,
+          isAutosaving: false,
+          lastSavedAt: layoutResult.layout.updatedAt ?? null,
+        });
+      } catch (err) {
+        console.error(`Debug flow: builder draft restore failed`, err);
+        setBlocks([]);
+        setLayoutId(null);
+        lastTrackedBlocksSignatureRef.current = JSON.stringify([]);
+      } finally {
+        draftHydratedRef.current = true;
+      }
+    };
+    void restoreBuilderDraft();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  useEffect(() => {
+    console.log(`Debug flow: builder dirty tracking effect fired with`, {
+      blockCount: blocks.length,
+      draftHydrated: draftHydratedRef.current,
+    });
+    if (!draftHydratedRef.current) {
+      return;
+    }
+    if (blocksSignature === lastTrackedBlocksSignatureRef.current) {
+      return;
+    }
+    lastTrackedBlocksSignatureRef.current = blocksSignature;
+    setAutosaveState((prev) => ({
+      ...prev,
+      hasUnsavedChanges: true,
+      isDraftSavedLocally: false,
+    }));
+  }, [blocks.length, blocksSignature]);
+
+  useEffect(() => {
+    console.log(`Debug flow: builder autosave effect fired with`, {
+      hasUnsavedChanges: autosaveState.hasUnsavedChanges,
+      isDraftSavedLocally: autosaveState.isDraftSavedLocally,
+      layoutId,
+      blockCount: blocks.length,
+      savingLayout,
+    });
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+    if (
+      !draftHydratedRef.current ||
+      !autosaveState.hasUnsavedChanges ||
+      autosaveState.isDraftSavedLocally ||
+      savingLayout ||
+      blocks.length === 0
+    ) {
+      return;
+    }
+    autosaveTimerRef.current = setTimeout(() => {
+      void (async () => {
+        const latestBlocks = latestBlocksRef.current;
+        const latestPersistedLayoutId = latestLayoutIdRef.current;
+        const anchorBlock = latestBlocks[0];
+        console.log(`Debug flow: builder autosave task fired with`, {
+          layoutId: latestPersistedLayoutId,
+          blockCount: latestBlocks.length,
+          anchorBlockId: anchorBlock?.id,
+        });
+        if (!anchorBlock) {
+          return;
+        }
+        setAutosaveState((prev) => ({ ...prev, isAutosaving: true }));
+        const result = await saveBlockStyles(
+          anchorBlock.id,
+          -1,
+          anchorBlock.blockStyles ?? "",
+          latestPersistedLayoutId ?? undefined,
+          latestBlocks
+        );
+        if (result.ok) {
+          const nextDraftLayoutId = result.layoutId ?? latestPersistedLayoutId;
+          const builderLayoutState = await fetchBuilderLayoutState(projectId);
+          await saveBuilderLayoutState(projectId, {
+            draftLayoutId: nextDraftLayoutId,
+            publishedLayoutId: builderLayoutState.publishedLayoutId,
+            lastPublishedAt: builderLayoutState.lastPublishedAt,
+          });
+          if (result.layoutId && result.layoutId !== latestPersistedLayoutId) {
+            setLayoutId(result.layoutId);
+          }
+          setAutosaveState((prev) => ({
+            ...prev,
+            hasUnsavedChanges: false,
+            isAutosaving: false,
+            lastSavedAt: new Date().toISOString(),
+            isDraftSavedLocally: true,
+          }));
+          return;
+        }
+        console.error(`Debug flow: builder autosave task failed`, result.error);
+        setAutosaveState((prev) => ({ ...prev, isAutosaving: false, isDraftSavedLocally: false }));
+      })();
+    }, BUILDER_AUTOSAVE_DELAY_MS);
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
+  }, [
+    autosaveState.hasUnsavedChanges,
+    autosaveState.isDraftSavedLocally,
+    blocks.length,
+    blocksSignature,
+    layoutId,
+    projectId,
+    savingLayout,
+  ]);
 
   const openLayoutPicker = () => {
     console.log(`Debug flow: openLayoutPicker fired`);
@@ -1172,6 +1406,20 @@ export function useBuilder() {
       const data = await saveLayoutApi(name.trim() || "My Dashboard", blocks);
       if (!data.ok) throw new Error(data.error ?? "Save failed");
       console.log(`Debug flow: saveLayout saved`, { id: data.layout?.id });
+      const builderLayoutState = await fetchBuilderLayoutState(projectId);
+      await saveBuilderLayoutState(projectId, {
+        draftLayoutId: data.layout?.id ?? null,
+        publishedLayoutId: builderLayoutState.publishedLayoutId,
+        lastPublishedAt: builderLayoutState.lastPublishedAt,
+      });
+      setLayoutId(data.layout?.id ?? null);
+      setAutosaveState((prev) => ({
+        ...prev,
+        hasUnsavedChanges: false,
+        isDraftSavedLocally: true,
+        isAutosaving: false,
+        lastSavedAt: new Date().toISOString(),
+      }));
       return data.layout?.id ?? null;
     } catch (err) {
       console.error(`Debug flow: saveLayout error`, err);
@@ -1209,6 +1457,7 @@ export function useBuilder() {
     variantTemplates,
     previewMode,
     savingLayout,
+    autosaveState,
     projectId,
     cssEditorState,
     codeEditorTab,

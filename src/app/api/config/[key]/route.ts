@@ -25,3 +25,39 @@ export async function GET(
 
   return NextResponse.json(JSON.parse(config.value));
 }
+
+export async function PUT(
+  req: Request,
+  { params }: { params: Promise<{ key: string }> }
+) {
+  console.log(`Debug flow: PUT /api/config/[key] fired`);
+  const ctx = await getProjectContext(req);
+  if (isErrorResponse(ctx)) return ctx;
+
+  const { key } = await params;
+  const body = await req.json();
+  console.log(`Debug flow: PUT /api/config/[key] params`, { key, projectId: ctx.projectId });
+
+  const config = await prisma.appConfig.upsert({
+    where: {
+      key_projectId: {
+        key,
+        projectId: ctx.projectId,
+      },
+    },
+    update: {
+      value: JSON.stringify(body ?? {}),
+    },
+    create: {
+      key,
+      projectId: ctx.projectId,
+      value: JSON.stringify(body ?? {}),
+    },
+  });
+
+  return NextResponse.json({
+    ok: true,
+    key: config.key,
+    value: body ?? {},
+  });
+}
