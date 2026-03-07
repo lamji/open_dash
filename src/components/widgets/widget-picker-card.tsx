@@ -49,15 +49,15 @@ export const WidgetPickerCard = ({ templates, onSelect }: WidgetPickerCardProps)
                 onSelect(template);
               }
             }}
-            className="text-left transition-all duration-200 hover:shadow-xl hover:scale-102 active:scale-98 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-lg"
+            className="rounded-xl text-left transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             title={template.title}
             data-test-id={`widget-picker-card-${template.slug}`}
           >
-            <Card className="w-80 h-80 border-2 border-slate-200 hover:border-blue-400 cursor-pointer overflow-hidden flex flex-col">
+            <Card className="flex h-[19rem] w-80 cursor-pointer flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white py-0 shadow-sm transition-shadow duration-200 hover:shadow-lg gap-0">
               {/* Preview Section - Full Card */}
-              <CardContent className="p-3 bg-gradient-to-br from-slate-50 to-slate-100 flex-1 overflow-hidden">
+              <CardContent className="flex-1 overflow-hidden bg-slate-50 p-2">
                 {WIDGET_PREVIEWS[template.slug] ? (
-                  <div className="w-full h-full">
+                  <div className="h-full w-full overflow-hidden rounded-[14px] bg-white px-3 py-2 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.12)]">
                     {isTableWidget
                       ? WIDGET_PREVIEWS[template.slug]({ ...template.widgetData, _preview: true })
                       : WIDGET_PREVIEWS[template.slug](template.widgetData ?? {})}

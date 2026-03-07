@@ -6,7 +6,7 @@ import { validateSession, SESSION_COOKIE_NAME } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 interface BuilderPageProps {
-  searchParams: Promise<{ projectId?: string }> | { projectId?: string };
+  searchParams: Promise<{ projectId?: string; preview?: string }> | { projectId?: string; preview?: string };
 }
 
 export default async function BuilderPage({ searchParams }: BuilderPageProps) {
@@ -33,6 +33,7 @@ export default async function BuilderPage({ searchParams }: BuilderPageProps) {
   }
 
   const projectId = resolvedSearchParams.projectId;
+  const previewParam = resolvedSearchParams.preview;
 
   if (!projectId) {
     console.log("Debug flow: BuilderPage - no projectId, redirecting to /dashboard");
@@ -52,6 +53,39 @@ export default async function BuilderPage({ searchParams }: BuilderPageProps) {
   if (!project) {
     console.log("Debug flow: BuilderPage - project not found or access denied, redirecting to /dashboard");
     redirect("/dashboard");
+  }
+
+  if (previewParam === "true") {
+    console.log("Debug flow: BuilderPage preview redirect flow fired", { projectId });
+    const builderLayoutConfig = await prisma.appConfig.findUnique({
+      where: {
+        key_projectId: {
+          key: "builder_layout_state",
+          projectId,
+        },
+      },
+    });
+    let publishedLayoutId: string | null = null;
+    let draftLayoutId: string | null = null;
+    if (builderLayoutConfig) {
+      try {
+        const parsedConfig = JSON.parse(builderLayoutConfig.value) as {
+          draftLayoutId?: string | null;
+          publishedLayoutId?: string | null;
+        };
+        publishedLayoutId = parsedConfig.publishedLayoutId ?? null;
+        draftLayoutId = parsedConfig.draftLayoutId ?? null;
+      } catch (err) {
+        console.error("Debug flow: BuilderPage preview config parse error", err);
+      }
+    }
+    const targetLayoutId = project.published
+      ? publishedLayoutId
+      : draftLayoutId;
+    if (!targetLayoutId) {
+      redirect("/dashboard");
+    }
+    redirect(`/preview/${targetLayoutId}`);
   }
 
   console.log("Debug flow: BuilderPage - authentication and project validation passed", { projectId, userId: sessionData.user.id });

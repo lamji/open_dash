@@ -33,6 +33,8 @@ import type { WidgetTemplate as WidgetTemplateWithDates } from "@/presentation/w
 import { GridPlyaGroundModal, getGridPlaygroundSlotPlacement } from "@/components/gridPlyaGround";
 import { LAYOUT_OPTIONS, SIDEBAR_CATEGORIES } from "./builder.constants";
 import {
+  buildWidgetElementOverrideCss,
+  buildWidgetThemeOverrideCss,
   cssStringToStyle,
   findBlock,
   getBlockContainerClass,
@@ -68,6 +70,7 @@ export default function BuilderShell() {
     variantTemplates,
     previewMode,
     savingLayout,
+    autosaveState,
     projectId,
     cssEditorState,
     codeEditorTab,
@@ -176,6 +179,30 @@ export default function BuilderShell() {
     };
   }, [blocks, previewMode]);
 
+  useEffect(() => {
+    console.log(`Debug flow: builder beforeunload effect fired with`, {
+      isDraftSavedLocally: autosaveState.isDraftSavedLocally,
+      isAutosaving: autosaveState.isAutosaving,
+      savingLayout,
+    });
+    const shouldBlockUnload =
+      savingLayout ||
+      autosaveState.isAutosaving ||
+      !autosaveState.isDraftSavedLocally;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      console.log(`Debug flow: handleBeforeUnload fired with`, { shouldBlockUnload });
+      if (!shouldBlockUnload) {
+        return;
+      }
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [autosaveState.isAutosaving, autosaveState.isDraftSavedLocally, savingLayout]);
+
   const handleAddWidget = (blockId: string, slotIdx: number) => {
     console.log(`Debug flow: handleAddWidget fired with`, { blockId, slotIdx });
     setSelectedSlot({ blockId, slotIdx });
@@ -235,6 +262,11 @@ export default function BuilderShell() {
     }
   };
 
+  const handleQuickSave = async () => {
+    console.log(`Debug flow: handleQuickSave fired with`, { dashboardName });
+    await saveLayout(dashboardName);
+  };
+
   const handleAddNavItem = async () => {
     if (!navItemLabel.trim()) return;
     const ok = await addNavItem(navItemLabel);
@@ -256,6 +288,9 @@ export default function BuilderShell() {
     const childBlocks = slot.childBlocks ?? [];
     const rawSlotCss = block.columnStyles?.[slotIdx];
     const slotStyle = cssStringToStyle(rawSlotCss ?? "");
+    const widgetElementOverrideCss = buildWidgetElementOverrideCss(rawSlotCss ?? "");
+    const widgetStyleScope = `builder-slot-widget-${block.id}-${slotIdx}`;
+    const widgetThemeOverrideCss = buildWidgetThemeOverrideCss(rawSlotCss ?? "", widgetStyleScope);
     const slotPlacementStyle = getGridPlaygroundSlotPlacement(block, slotIdx);
     const hasCustomStyle = Object.keys(slotStyle).length > 0;
     const hasChildren = childBlocks.length > 0;
@@ -297,15 +332,15 @@ export default function BuilderShell() {
             delete slotRefs.current[slotKey];
           }
         }}
-        className={`relative w-full min-w-0 rounded-xl ${!hasCustomStyle && !widget && !hasChildren ? "bg-[#ECECEC]" : ""} ${hasChildren ? "p-3" : ""}`}
+        className={`relative w-full min-w-0 rounded-[28px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-28px_rgba(15,23,42,0.35)] ${!hasCustomStyle && !widget && !hasChildren ? "bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]" : ""} ${hasChildren ? "p-4" : "p-3"}`}
         style={{ ...slotBaseStyle, ...slotStyle, ...slotPlacementStyle }}
         data-test-id={`builder-slot-${block.id}-${slotIdx}`}
       >
-        {!previewMode && !widget && !hasChildren && !isCompactSlot && (
-          <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
+        {!previewMode && !widget && !isCompactSlot && (
+          <div className="absolute right-3 top-3 z-10 flex items-center gap-1.5">
             <button
               onClick={(e) => { e.stopPropagation(); openGroqChat(block.id, slotIdx); }}
-              className="text-slate-400 hover:text-purple-500 bg-white/80 backdrop-blur-sm rounded p-1 shadow-sm transition-colors"
+              className="rounded-full border border-slate-200 bg-white p-1.5 text-slate-400 shadow-sm transition-colors hover:border-blue-200 hover:text-blue-600"
               title="Ask AI to style this column"
               data-test-id={`builder-empty-slot-ai-style-${block.id}-${slotIdx}`}
             >
@@ -313,24 +348,45 @@ export default function BuilderShell() {
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); openCssEditorWithDraft(block, slotIdx); }}
-              className="text-slate-400 hover:text-blue-500 bg-white/80 backdrop-blur-sm rounded p-1 shadow-sm transition-colors"
+              className="rounded-full border border-slate-200 bg-white p-1.5 text-slate-400 shadow-sm transition-colors hover:border-blue-200 hover:text-blue-600"
               title="Edit column styles"
               data-test-id={`builder-empty-slot-edit-${block.id}-${slotIdx}`}
             >
               <Pencil className="w-3 h-3" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                removeWidget(block.id, slotIdx);
+              }}
+              className="rounded-full border border-slate-200 bg-white p-1.5 text-slate-400 shadow-sm transition-colors hover:border-red-200 hover:text-red-500"
+              title="Clear column content"
+              data-test-id={`builder-empty-slot-clear-${block.id}-${slotIdx}`}
+            >
+              <X className="w-3 h-3" />
             </button>
           </div>
         )}
 
         {widget && (
           <div className="flex flex-col h-full" data-test-id={`builder-slot-filled-${block.id}-${slotIdx}`}>
+            {widgetElementOverrideCss && (
+              <style data-test-id={`builder-slot-widget-style-${block.id}-${slotIdx}`}>
+                {`[data-test-id="${widgetStyleScope}"] { ${widgetElementOverrideCss} }`}
+              </style>
+            )}
+            {widgetThemeOverrideCss && (
+              <style data-test-id={`builder-slot-widget-theme-style-${block.id}-${slotIdx}`}>
+                {widgetThemeOverrideCss}
+              </style>
+            )}
             {!previewMode && (
-              <div className={`flex mb-2 flex-shrink-0 ${isCompactSlot ? "items-center justify-end" : "items-center justify-between"}`} data-test-id={`builder-slot-header-${block.id}-${slotIdx}`}>
-                {!isCompactSlot && <span className="text-xs font-semibold text-slate-500 truncate">{widget.title}</span>}
+              <div className={`mb-3 flex flex-shrink-0 ${isCompactSlot ? "items-center justify-end" : "items-center justify-between gap-3"}`} data-test-id={`builder-slot-header-${block.id}-${slotIdx}`}>
+                {!isCompactSlot && <span className="truncate text-xs font-semibold tracking-[0.12em] text-slate-400 uppercase">{widget.title}</span>}
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => openGroqChat(block.id, slotIdx)}
-                    className="text-slate-400 hover:text-purple-500 flex-shrink-0"
+                    className="flex-shrink-0 rounded-full border border-transparent p-1.5 text-slate-400 transition-colors hover:border-blue-100 hover:bg-blue-50 hover:text-blue-600"
                     title="Ask AI to style this slot"
                     data-test-id={`builder-slot-ai-${block.id}-${slotIdx}`}
                   >
@@ -338,7 +394,7 @@ export default function BuilderShell() {
                   </button>
                   <button
                     onClick={() => { openCssEditorWithDraft(block, slotIdx); }}
-                    className="text-slate-400 hover:text-blue-500 flex-shrink-0"
+                    className="flex-shrink-0 rounded-full border border-transparent p-1.5 text-slate-400 transition-colors hover:border-blue-100 hover:bg-blue-50 hover:text-blue-600"
                     title="Edit slot styles"
                     data-test-id={`builder-slot-edit-${block.id}-${slotIdx}`}
                   >
@@ -346,7 +402,7 @@ export default function BuilderShell() {
                   </button>
                   <button
                     onClick={() => removeWidget(block.id, slotIdx)}
-                    className="text-slate-400 hover:text-red-500 flex-shrink-0 ml-1"
+                    className="ml-1 flex-shrink-0 rounded-full border border-transparent p-1.5 text-slate-400 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-500"
                     data-test-id={`builder-slot-clear-${block.id}-${slotIdx}`}
                   >
                     <X className="w-3.5 h-3.5" />
@@ -366,17 +422,17 @@ export default function BuilderShell() {
         )}
 
         {!widget && !hasChildren && !previewMode && (
-          <div className={`flex h-full w-full items-center justify-center ${shouldApplyDefaultSlotMinHeight ? "min-h-[200px]" : "min-h-0"}`}>
-            <div className={`flex w-full px-2 py-2 ${isCompactSlot ? "flex-col items-stretch gap-1.5" : "max-w-[420px] flex-wrap items-center justify-center gap-2"}`}>
+          <div className={`flex h-full w-full items-center justify-center ${shouldApplyDefaultSlotMinHeight ? "min-h-[220px]" : "min-h-0"}`}>
+            <div className={`flex w-full px-3 py-3 ${isCompactSlot ? "flex-col items-stretch gap-2" : "max-w-[420px] flex-wrap items-center justify-center gap-3"}`}>
               <button
                 onClick={() => handleAddWidget(block.id, slotIdx)}
-                className={`inline-flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 rounded-xl hover:border-blue-400 hover:bg-blue-50/50 transition-all group ${isCompactSlot ? "w-full px-2 py-1.5" : "px-4 py-2 whitespace-nowrap"}`}
+                className={`group inline-flex items-center justify-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 transition-all hover:border-blue-400 hover:bg-blue-50 ${isCompactSlot ? "w-full px-3 py-2" : "px-5 py-3 whitespace-nowrap"}`}
                 data-test-id={`builder-slot-add-widget-${block.id}-${slotIdx}`}
               >
-                <div className={`${isCompactSlot ? "w-5 h-5" : "w-6 h-6"} bg-slate-100 group-hover:bg-blue-100 rounded-md flex items-center justify-center transition-colors`}>
+                <div className={`${isCompactSlot ? "h-5 w-5" : "h-7 w-7"} flex items-center justify-center rounded-xl bg-white shadow-sm transition-colors group-hover:bg-blue-100`}>
                   <Plus className={`${isCompactSlot ? "w-3 h-3" : "w-3.5 h-3.5"} text-slate-400 group-hover:text-blue-500`} />
                 </div>
-                <span className={`${isCompactSlot ? "text-[11px]" : "text-xs"} font-medium text-slate-500 group-hover:text-blue-600`}>Add Widget</span>
+                <span className={`${isCompactSlot ? "text-[11px]" : "text-xs"} font-medium text-slate-600 group-hover:text-blue-700`}>Add Widget</span>
               </button>
 
               <Button
@@ -384,7 +440,7 @@ export default function BuilderShell() {
                 variant="ghost"
                 size="sm"
                 onClick={() => handleAddLayout(block.id, slotIdx)}
-                className={`${isCompactSlot ? "h-8 w-full px-2 text-[11px]" : "h-9 px-3 text-xs whitespace-nowrap"} text-slate-500 hover:text-blue-600`}
+                className={`${isCompactSlot ? "h-9 w-full px-3 text-[11px]" : "h-10 px-4 text-xs whitespace-nowrap"} rounded-2xl border border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700`}
                 data-test-id={`builder-slot-add-layout-${block.id}-${slotIdx}`}
               >
                 Add layout
@@ -392,7 +448,7 @@ export default function BuilderShell() {
 
               <Button
                 size="icon"
-                className={`${isCompactSlot ? "h-8 w-8 self-center" : "h-9 w-9"} rounded-full border border-[var(--primary)]/20 bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm transition-colors hover:bg-[var(--primary)]/90 flex-shrink-0`}
+                className={`${isCompactSlot ? "h-9 w-9 self-center" : "h-10 w-10"} flex-shrink-0 rounded-full border border-blue-200 bg-blue-600 text-white shadow-sm transition-colors hover:bg-blue-700`}
                 onClick={() => setAiPromptModal({ blockId: block.id, slotIdx })}
                 data-test-id={`builder-slot-ai-open-${block.id}-${slotIdx}`}
               >
@@ -402,7 +458,7 @@ export default function BuilderShell() {
                 <Button
                   size="icon"
                   variant="outline"
-                  className="h-8 w-8 self-center"
+                  className="h-9 w-9 self-center rounded-full border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                   onClick={() => openCssEditorWithDraft(block, slotIdx)}
                   data-test-id={`builder-slot-edit-compact-${block.id}-${slotIdx}`}
                 >
@@ -416,14 +472,40 @@ export default function BuilderShell() {
         {hasChildren && (
           <div className={`${widget ? "mt-4" : "mt-0"} flex min-h-0 flex-col gap-3 ${hasHeightConstraint ? "h-full" : ""}`} data-test-id={`builder-slot-children-${block.id}-${slotIdx}`}>
             {!previewMode && (
-              <div className={`flex items-center ${isCompactSlot ? "flex-col gap-2 items-start" : ""}`}>
+              <div className={`flex items-start justify-between gap-3 ${isCompactSlot ? "flex-col items-start gap-2" : ""}`}>
                 <div className="min-w-0">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Nested layout</p>
                   <p className="text-xs text-slate-500">Child columns stay inside this parent wrapper.</p>
                 </div>
+                <div className="flex flex-shrink-0 items-center gap-1">
+                  <button
+                    onClick={() => openGroqChat(block.id, slotIdx)}
+                    className="rounded-full border border-transparent p-1.5 text-slate-400 transition-colors hover:border-blue-100 hover:bg-blue-50 hover:text-blue-600"
+                    title="Ask AI to style this column"
+                    data-test-id={`builder-slot-children-ai-${block.id}-${slotIdx}`}
+                  >
+                    <Sparkles className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => { openCssEditorWithDraft(block, slotIdx); }}
+                    className="rounded-full border border-transparent p-1.5 text-slate-400 transition-colors hover:border-blue-100 hover:bg-blue-50 hover:text-blue-600"
+                    title="Edit column styles"
+                    data-test-id={`builder-slot-children-edit-${block.id}-${slotIdx}`}
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => removeWidget(block.id, slotIdx)}
+                    className="rounded-full border border-transparent p-1.5 text-slate-400 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-500"
+                    title="Clear column content"
+                    data-test-id={`builder-slot-children-clear-${block.id}-${slotIdx}`}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             )}
-            <div className="rounded-xl p-3 flex-1 min-h-0">
+            <div className="flex-1 min-h-0 rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-4">
               <div className="space-y-3 min-h-0">
                 {childBlocks.map((childBlock) => renderBlock(childBlock, depth + 1))}
               </div>
@@ -440,21 +522,21 @@ export default function BuilderShell() {
     return (
       <div
         key={block.id}
-        className=""
+        className="min-w-0"
         style={blockStyle}
         data-test-id={`builder-block-${block.id}`}
       >
         {!previewMode && (
-          <div className={`flex items-center justify-between px-4 py-2 border-b border-slate-200 ${depth > 0 ? "bg-slate-100" : "bg-slate-50"}`} data-test-id={`builder-block-header-${block.id}`}>
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+          <div className={`flex min-w-0 items-center justify-between gap-3 border-b border-slate-200 px-5 py-4 ${depth > 0 ? "bg-slate-50" : "bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]"}`} data-test-id={`builder-block-header-${block.id}`}>
+            <span className="min-w-0 truncate text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
               {depth > 0 ? "Nested" : ""}
               {depth > 0 ? " " : ""}
               {LAYOUT_OPTIONS.find((layout) => layout.type === block.type)?.label ?? block.type}
             </span>
-            <div className="flex items-center gap-1">
+            <div className="flex flex-shrink-0 items-center gap-1">
               <button
                 onClick={() => openGroqChat(block.id, -1)}
-                className="text-slate-400 hover:text-purple-500 transition-colors"
+                className="rounded-full border border-transparent p-1.5 text-slate-400 transition-colors hover:border-blue-100 hover:bg-blue-50 hover:text-blue-600"
                 title="Ask AI to style this block"
                 data-test-id={`builder-block-ai-${block.id}`}
               >
@@ -462,7 +544,7 @@ export default function BuilderShell() {
               </button>
               <button
                 onClick={() => { openCssEditorWithDraft(block); }}
-                className="text-slate-400 hover:text-blue-500 transition-colors"
+                className="rounded-full border border-transparent p-1.5 text-slate-400 transition-colors hover:border-blue-100 hover:bg-blue-50 hover:text-blue-600"
                 title="Edit block styles"
                 data-test-id={`builder-block-edit-${block.id}`}
               >
@@ -471,7 +553,7 @@ export default function BuilderShell() {
               {block.slots.length > 1 && (
                 <button
                   onClick={() => handleOpenGridRatioModal(block)}
-                  className="text-slate-400 hover:text-green-500 transition-colors"
+                  className="rounded-full border border-transparent p-1.5 text-slate-400 transition-colors hover:border-emerald-100 hover:bg-emerald-50 hover:text-emerald-600"
                   title="Set column ratio"
                   data-test-id={`builder-block-ratio-${block.id}`}
                 >
@@ -480,7 +562,7 @@ export default function BuilderShell() {
               )}
               <button
                 onClick={() => removeBlock(block.id)}
-                className="text-slate-400 hover:text-red-500 transition-colors"
+                className="rounded-full border border-transparent p-1.5 text-slate-400 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-500"
                 data-test-id={`builder-block-delete-${block.id}`}
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -498,37 +580,40 @@ export default function BuilderShell() {
   const selectedGridBlock = gridRatioModal ? findBlock(blocks, gridRatioModal.blockId) : null;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50" data-test-id="builder-shell">
+    <div className="flex h-screen overflow-hidden bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_48%,#f8fafc_100%)]" data-test-id="builder-shell">
 
       {/* ── Left Sidebar ── */}
-      <aside className="w-60 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-hidden" data-test-id="builder-sidebar">
+      <aside className="w-64 flex-shrink-0 border-r border-slate-200/80 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] flex flex-col overflow-hidden" data-test-id="builder-sidebar">
           {/* Brand */}
-          <div className="px-4 py-4 border-b border-slate-100" data-test-id="builder-sidebar-brand">
+          <div className="border-b border-slate-200/80 px-5 py-5" data-test-id="builder-sidebar-brand">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-blue-600 shadow-[0_14px_24px_-16px_rgba(37,99,235,0.8)]">
                 <LayoutGrid className="w-4 h-4 text-white" />
               </div>
-              <span className="font-bold text-slate-800 text-sm">OpenDash</span>
+              <div>
+                <p className="text-sm font-semibold tracking-[0.18em] text-slate-800 uppercase">OpenDash</p>
+                <p className="text-[11px] text-slate-400">Builder workspace</p>
+              </div>
             </div>
           </div>
 
           {/* Sidebar nav — dynamic items from DB */}
-          <div className="flex-1 overflow-y-auto px-3 py-3" data-test-id="builder-sidebar-nav">
-            <div className="flex items-center justify-between px-1 mb-2">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider" data-test-id="builder-sidebar-nav-label">Navigation</p>
+          <div className="flex-1 overflow-y-auto px-4 py-5" data-test-id="builder-sidebar-nav">
+            <div className="mb-3 flex items-center justify-between px-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-400" data-test-id="builder-sidebar-nav-label">Navigation</p>
             </div>
-            <div className="space-y-0.5 mb-2" data-test-id="builder-sidebar-nav-items">
+            <div className="mb-3 space-y-1.5" data-test-id="builder-sidebar-nav-items">
               {navItems.map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-700 hover:bg-slate-50 cursor-pointer text-xs font-medium group"
+                  className="group flex cursor-pointer items-center gap-3 rounded-2xl border border-transparent bg-white/80 px-3 py-3 text-xs font-medium text-slate-700 shadow-[0_10px_30px_-28px_rgba(15,23,42,0.5)] transition-all hover:border-slate-200 hover:bg-white"
                   data-test-id={`builder-nav-item-${item.id}`}
                 >
-                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                  <div className="h-2 w-2 flex-shrink-0 rounded-full bg-blue-500" />
                   <span className="truncate flex-1">{item.label}</span>
                   <button
                     onClick={(e) => { e.stopPropagation(); removeNavItem(item.id); }}
-                    className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-all flex-shrink-0"
+                    className="flex-shrink-0 text-slate-300 opacity-0 transition-all hover:text-red-500 group-hover:opacity-100"
                     title="Delete nav item"
                     data-test-id={`builder-nav-item-delete-${item.id}`}
                   >
@@ -541,7 +626,7 @@ export default function BuilderShell() {
               <button
                 onClick={openNavItemModal}
                 disabled={addingNavItem || loadingNavItems}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 border border-dashed border-slate-200 text-xs hover:border-blue-300 hover:text-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-slate-200 disabled:hover:text-slate-400"
+                className="flex w-full items-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-xs text-slate-500 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-300 disabled:hover:bg-slate-50 disabled:hover:text-slate-500"
                 data-test-id="builder-sidebar-add-nav-btn"
               >
                 {addingNavItem ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
@@ -552,64 +637,92 @@ export default function BuilderShell() {
         </aside>
 
       {/* ── Main Area ── */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden" data-test-id="builder-main">
+      <div className="flex-1 flex min-w-0 flex-col overflow-hidden" data-test-id="builder-main">
 
         {/* Header */}
-        <div className="flex-shrink-0 bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between" data-test-id="builder-header">
-          <div className="flex items-center gap-3">
-            {previewMode && (
-              <div className="flex items-center gap-2">
-                <LayoutGrid className="w-5 h-5 text-blue-600" />
-                <span className="font-semibold text-slate-800 text-sm">Dashboard Builder</span>
+        <div className="flex-shrink-0 border-b border-slate-200/80 bg-white/80 px-8 py-5 backdrop-blur" data-test-id="builder-header">
+          <div className="flex items-center justify-between gap-6">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Dashboard Builder</p>
+              <div className="mt-1 flex items-center gap-3">
+                <h1 className="truncate font-semibold text-slate-900">{dashboardName}</h1>
+                <Badge variant="secondary" className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-medium text-slate-500">
+                  {previewMode ? "Preview mode" : "Editing"}
+                </Badge>
               </div>
-            )}
-            {!previewMode && (
-              <Button size="sm" variant="outline" onClick={openLayoutPicker} data-test-id="builder-add-block-btn">
-                <Plus className="w-4 h-4 mr-1" /> Add Block
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="hidden min-w-[180px] text-right sm:block" data-test-id="builder-save-status">
+                <p className="text-[11px] font-medium text-slate-500">
+                  {savingLayout
+                    ? "Saving layout..."
+                    : autosaveState.isAutosaving
+                      ? "Autosaving..."
+                      : autosaveState.hasUnsavedChanges
+                        ? "Unsaved changes"
+                        : "All changes saved"}
+                </p>
+                <p className="text-[10px] text-slate-400">
+                  {autosaveState.isDraftSavedLocally
+                    ? autosaveState.lastSavedAt
+                      ? `Draft saved ${new Date(autosaveState.lastSavedAt).toLocaleTimeString()}`
+                      : "Draft saved in database"
+                    : "Saving draft to database..."}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={togglePreview}
+                className="rounded-full border-slate-300 bg-white px-4 text-slate-700 hover:bg-slate-50"
+                data-test-id="builder-preview-toggle"
+              >
+                {previewMode ? <EyeOff className="mr-2 h-4 w-4" /> : <Eye className="mr-2 h-4 w-4" />}
+                Preview
               </Button>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={togglePreview}
-              data-test-id="builder-preview-toggle"
-            >
-              {previewMode ? <EyeOff className="w-4 h-4 mr-1" /> : <Eye className="w-4 h-4 mr-1" />}
-              {previewMode ? "Edit" : "Preview"}
-            </Button>
-            <Button
-              size="sm"
-              disabled={blocks.length === 0 || savingLayout}
-              onClick={() => setSaveDialogOpen(true)}
-              data-test-id="builder-save-btn"
-            >
-              {savingLayout ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
-              Save & Preview →
-            </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={blocks.length === 0 || savingLayout}
+                onClick={() => { void handleQuickSave(); }}
+                className="rounded-full border-slate-300 bg-white px-4 text-slate-700 hover:bg-slate-50"
+                data-test-id="builder-save-btn"
+              >
+                {savingLayout ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Save
+              </Button>
+              <Button
+                size="sm"
+                disabled={blocks.length === 0 || savingLayout}
+                onClick={() => setSaveDialogOpen(true)}
+                className="rounded-full bg-blue-600 px-5 text-white shadow-[0_16px_30px_-18px_rgba(37,99,235,0.8)] hover:bg-blue-700"
+                data-test-id="builder-publish-btn"
+              >
+                Publish
+              </Button>
+            </div>
           </div>
         </div>
 
         {/* Canvas */}
-        <div className="flex-1 overflow-auto px-6 py-6" data-test-id="builder-canvas">
+        <div className="flex-1 overflow-auto px-8 py-8" data-test-id="builder-canvas">
           {blocks.length === 0 && (
             <EmptyStateSection openLayoutPicker={openLayoutPicker} navItems={navItems} />
           )}
 
-          <div className="space-y-4 w-full px-6 py-6" data-test-id="builder-blocks">
+          <div className="w-full space-y-5" data-test-id="builder-blocks">
             {blocks.map((block) => renderBlock(block))}
           </div>
 
           {blocks.length > 0 && !previewMode && (
-            <div className="mt-4 flex justify-center" data-test-id="builder-add-more-row">
+            <div className="mt-6 flex justify-center" data-test-id="builder-add-more-row">
               <button
                 onClick={openLayoutPicker}
                 disabled={navItems.length === 0}
-                className={`flex items-center gap-2 px-4 py-2 text-sm border border-dashed rounded-lg transition-colors ${
+                className={`flex items-center gap-2 rounded-full border border-dashed px-5 py-3 text-sm transition-colors ${
                   navItems.length === 0
-                    ? "text-slate-300 border-slate-200 cursor-not-allowed"
-                    : "text-slate-500 border-slate-300 hover:border-blue-400 hover:text-blue-500"
+                    ? "cursor-not-allowed border-slate-200 text-slate-300"
+                    : "border-slate-300 bg-white text-slate-600 hover:border-blue-400 hover:text-blue-600"
                 }`}
                 data-test-id="builder-add-more-btn"
               >

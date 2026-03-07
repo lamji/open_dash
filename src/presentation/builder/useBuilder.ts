@@ -3,3 +3,8 @@ export {
   mergeCss,
   useBuilder,
 } from "@/lib/hooks/useBuilderController";
+
+export type {
+  BuilderAutosaveState,
+  BuilderDraftPayload,
+} from "@/domain/builder/types";

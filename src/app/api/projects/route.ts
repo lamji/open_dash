@@ -29,6 +29,23 @@ export async function GET() {
     where: { userId: user.id },
     orderBy: { updatedAt: "desc" },
   });
+  const builderLayoutConfigs = await prisma.appConfig.findMany({
+    where: {
+      projectId: { in: projects.map((project) => project.id) },
+      key: "builder_layout_state",
+    },
+  });
+  const layoutConfigMap = new Map<string, { publishedLayoutId?: string | null }>();
+  builderLayoutConfigs.forEach((config) => {
+    try {
+      layoutConfigMap.set(
+        config.projectId,
+        JSON.parse(config.value) as { publishedLayoutId?: string | null }
+      );
+    } catch (err) {
+      console.error("Debug flow: GET /api/projects config parse error", err);
+    }
+  });
 
   return NextResponse.json({
     ok: true,
@@ -38,6 +55,7 @@ export async function GET() {
       slug: p.slug,
       description: p.description,
       published: p.published,
+      liveLayoutId: layoutConfigMap.get(p.id)?.publishedLayoutId ?? null,
       createdAt: p.createdAt.toISOString(),
       updatedAt: p.updatedAt.toISOString(),
     })),
@@ -85,6 +103,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  console.log(`Debug flow: PUT /api/projects fired`);
   const user = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
@@ -92,6 +111,7 @@ export async function PUT(request: NextRequest) {
 
   const body = await request.json();
   const { id, name, description, published } = body;
+  console.log(`Debug flow: PUT /api/projects params`, { id, published });
 
   if (!id) {
     return NextResponse.json({ ok: false, error: "Project ID is required" }, { status: 400 });
@@ -108,12 +128,78 @@ export async function PUT(request: NextRequest) {
   const data: Record<string, unknown> = {};
   if (name !== undefined) data.name = name.trim();
   if (description !== undefined) data.description = description.trim();
-  if (published !== undefined) data.published = published;
+  if (published !== undefined) {
+    if (published === true) {
+      const builderLayoutConfig = await prisma.appConfig.findUnique({
+        where: {
+          key_projectId: {
+            key: "builder_layout_state",
+            projectId: id,
+          },
+        },
+      });
+      const parsedLayoutConfig = builderLayoutConfig
+        ? JSON.parse(builderLayoutConfig.value) as {
+            draftLayoutId?: string | null;
+            publishedLayoutId?: string | null;
+            lastPublishedAt?: string | null;
+          }
+        : null;
+      const draftLayoutId = parsedLayoutConfig?.draftLayoutId ?? null;
+      if (!draftLayoutId) {
+        return NextResponse.json(
+          { ok: false, error: "Cannot publish a project without a saved builder draft." },
+          { status: 400 }
+        );
+      }
+      await prisma.appConfig.upsert({
+        where: {
+          key_projectId: {
+            key: "builder_layout_state",
+            projectId: id,
+          },
+        },
+        update: {
+          value: JSON.stringify({
+            draftLayoutId,
+            publishedLayoutId: draftLayoutId,
+            lastPublishedAt: new Date().toISOString(),
+          }),
+        },
+        create: {
+          key: "builder_layout_state",
+          projectId: id,
+          value: JSON.stringify({
+            draftLayoutId,
+            publishedLayoutId: draftLayoutId,
+            lastPublishedAt: new Date().toISOString(),
+          }),
+        },
+      });
+    }
+    data.published = published;
+  }
 
   const project = await prisma.project.update({
     where: { id },
     data,
   });
+  const builderLayoutConfig = await prisma.appConfig.findUnique({
+    where: {
+      key_projectId: {
+        key: "builder_layout_state",
+        projectId: id,
+      },
+    },
+  });
+  let liveLayoutId: string | null = null;
+  if (builderLayoutConfig) {
+    try {
+      liveLayoutId = (JSON.parse(builderLayoutConfig.value) as { publishedLayoutId?: string | null }).publishedLayoutId ?? null;
+    } catch (err) {
+      console.error("Debug flow: PUT /api/projects config parse error", err);
+    }
+  }
 
   return NextResponse.json({
     ok: true,
@@ -123,6 +209,7 @@ export async function PUT(request: NextRequest) {
       slug: project.slug,
       description: project.description,
       published: project.published,
+      liveLayoutId,
       createdAt: project.createdAt.toISOString(),
       updatedAt: project.updatedAt.toISOString(),
     },

@@ -33,6 +33,129 @@ export interface WidgetCategoryInfo {
   color: string;
 }
 
+export interface TabBarTabItem {
+  label: string;
+  active?: boolean;
+}
+
+export interface TabBarWidgetProps {
+  data: Record<string, unknown>;
+}
+
+export interface ToggleWidgetProps {
+  data: Record<string, unknown>;
+}
+
+export interface SidebarNavItem {
+  icon: string;
+  label: string;
+  active?: boolean;
+  badge?: string;
+}
+
+export interface SidebarNavWidgetProps {
+  data: Record<string, unknown>;
+}
+
+export interface SelectWidgetOption {
+  value: string;
+  label: string;
+}
+
+export interface SelectWidgetProps {
+  data: Record<string, unknown>;
+}
+
+export interface OrdersTableWidgetProps {
+  data: Record<string, unknown>;
+  preview?: boolean;
+}
+
+export interface CustomersTableWidgetProps {
+  data: Record<string, unknown>;
+  preview?: boolean;
+}
+
+export interface TransactionsTableWidgetProps {
+  data: Record<string, unknown>;
+  preview?: boolean;
+}
+
+export interface OrderStatusObject {
+  value: string;
+  options?: unknown[];
+}
+
+export interface OrderRow {
+  id: string;
+  customer: string;
+  amount: string;
+  status: string | OrderStatusObject;
+}
+
+export interface CustomerRow {
+  name: string;
+  email: string;
+  plan: string;
+  spend: string;
+}
+
+export interface TxRow {
+  date: string;
+  desc: string;
+  amount: string;
+  type: string;
+}
+
+export interface SortableHeaderContext {
+  column: {
+    id: string;
+    getIsSorted: () => false | "asc" | "desc";
+    toggleSorting: (desc?: boolean) => void;
+  };
+}
+
+export interface SelectableRowState<TRow> {
+  id: string;
+  original: TRow;
+  getIsSelected: () => boolean;
+  toggleSelected: (value?: boolean) => void;
+}
+
+export interface OrdersTableCellContext {
+  getValue: () => unknown;
+  row: SelectableRowState<OrderRow>;
+}
+
+export interface CustomersTableCellContext {
+  getValue: () => unknown;
+  row: SelectableRowState<CustomerRow>;
+}
+
+export interface TransactionsTableCellContext {
+  getValue: () => unknown;
+  row: SelectableRowState<TxRow>;
+}
+
+export interface OrdersTableColumnHelpers {
+  sorting: {
+    value: Array<{ id: string; desc: boolean }>;
+    set: (next: Array<{ id: string; desc: boolean }>) => void;
+  };
+  filtering: {
+    value: Record<string, string>;
+    clear: () => void;
+    set: (id: string, value: string) => void;
+  };
+  rowSelection: {
+    value: Record<string, boolean>;
+    clear: () => void;
+    toggle: (id: string) => void;
+    set: (next: Record<string, boolean>) => void;
+    selectAll: (ids: string[]) => void;
+  };
+}
+
 export interface TableFeatureConfig {
   sorting?: boolean;
   filtering?: boolean;

@@ -133,7 +133,14 @@ export function useDashboard() {
 
   const handleOpenBuilder = useCallback((project: DashboardProject) => {
     console.log(`Debug flow: handleOpenBuilder fired with`, { projectId: project.id });
-    router.push(`/builder?projectId=${project.id}`);
+    const builderUrl = `/builder?projectId=${project.id}`;
+    if (typeof window !== "undefined") {
+      const openedWindow = window.open(builderUrl, "_blank", "noopener,noreferrer");
+      if (openedWindow) {
+        return;
+      }
+    }
+    router.push(builderUrl);
   }, [router]);
 
   const handleViewLive = useCallback((project: DashboardProject) => {
