@@ -40,8 +40,15 @@ const COMMON_LUCIDE_ICONS = [
   "Users",
   "LayoutDashboard",
   "BarChart3",
+  "Award",
   "TrendingUp",
   "TrendingDown",
+  "Trophy",
+  "Medal",
+  "Sparkles",
+  "TriangleAlert",
+  "CheckCircle2",
+  "Activity",
   "Star",
 ] as const;
 
@@ -204,9 +211,10 @@ const CATEGORY_SPECS: Record<WidgetCategory, WidgetSpecTemplate> = {
   leaderboard: {
     summary: "Leaderboard widget with ranked entries, scores, and badges.",
     visualDescription: "Renders ranked rows with name, score, rank, and badge/trophy indicators.",
-    internalStyleRule: "Use /data for entries, scores, and badge values. Use /styles for card styling only.",
+    internalStyleRule: "Use /data for entries, scores, badge values, and icon fields. Use /styles for card styling only.",
     dataFieldHints: ["title", "entries[]", "entries[].rank", "entries[].name", "entries[].score", "entries[].badge"],
-    dataExamples: ["/data set entries[0].score to 3020"],
+    iconFieldHints: ["headerIcon", "entries[].icon"],
+    dataExamples: ["/data set entries[0].score to 3020", "/data set entries[0].icon to Trophy"],
   },
   summary: {
     summary: "Summary widget with KPI groups or scorecard items.",
@@ -282,6 +290,11 @@ const WIDGET_OVERRIDES: Record<string, Partial<WidgetSpecTemplate>> = {
   "button-right-icon": {
     iconFieldHints: ["icon"],
     dataFieldHints: ["label", "description", "icon", "buttonBgColor", "buttonTextColor", "iconColor"],
+  },
+  "agent-leaderboard": {
+    iconFieldHints: ["headerIcon", "entries[].icon"],
+    dataFieldHints: ["headerIcon", "headerIconColor", "entries[].icon", "entries[].iconColor"],
+    dataExamples: ["/data set headerIcon to Award", "/data set entries[0].icon to Trophy"],
   },
 };
 

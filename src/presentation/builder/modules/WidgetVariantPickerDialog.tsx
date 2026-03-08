@@ -2,14 +2,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { WidgetPickerCard } from "@/components/widgets/widget-picker-card";
 import { WIDGET_CATEGORIES } from "@/presentation/widgets";
-import type { WidgetTemplate as WidgetTemplateWithDates } from "@/presentation/widgets/useWidgets";
 import type { WidgetTemplate } from "@/domain/widgets/types";
 
 interface WidgetVariantPickerDialogProps {
   showWidgetVariantPicker: { blockId: string; slotIdx: number; category: string } | null;
   closeWidgetVariantPicker: () => void;
   loadingTemplates: boolean;
-  variantTemplates: unknown[];
+  variantTemplates: WidgetTemplate[];
   placeWidget: (blockId: string, slotIdx: number, template: WidgetTemplate) => void;
   setSelectedSlot: (slot: { blockId: string; slotIdx: number } | null) => void;
 }
@@ -28,7 +27,9 @@ export function WidgetVariantPickerDialog({
         <DialogHeader className="px-6 pt-6 pb-4 border-b bg-white flex-shrink-0">
           <DialogTitle>
             {showWidgetVariantPicker
-              ? `Choose a ${WIDGET_CATEGORIES.find(c => c.id === showWidgetVariantPicker.category)?.label ?? showWidgetVariantPicker.category} widget`
+              ? showWidgetVariantPicker.category === "custom"
+                ? "Choose a custom widget"
+                : `Choose a ${WIDGET_CATEGORIES.find(c => c.id === showWidgetVariantPicker.category)?.label ?? showWidgetVariantPicker.category} widget`
               : "Choose widget"}
           </DialogTitle>
         </DialogHeader>
@@ -37,17 +38,24 @@ export function WidgetVariantPickerDialog({
             <div className="flex items-center justify-center h-40 text-slate-400 text-sm" data-test-id="builder-variant-loading">Loading widgets…</div>
           ) : variantTemplates.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 gap-2" data-test-id="builder-variant-empty">
-              <p className="text-slate-500 text-sm">No widgets found for this category.</p>
-              <Badge variant="secondary">Try seeding the DB with widgets</Badge>
+              <p className="text-slate-500 text-sm">
+                {showWidgetVariantPicker?.category === "custom"
+                  ? "No private custom widgets found for this project."
+                  : "No widgets found for this category."}
+              </p>
+              <Badge variant="secondary">
+                {showWidgetVariantPicker?.category === "custom" ? "Create one from the Widgets page" : "Try seeding the DB with widgets"}
+              </Badge>
             </div>
           ) : (
             <div className="p-6" data-test-id="builder-variant-grid">
               <WidgetPickerCard
-                templates={variantTemplates as unknown as WidgetTemplateWithDates[]}
-                onSelect={(template: WidgetTemplateWithDates) => {
+                templates={variantTemplates}
+                onSelect={(template) => {
                   if (showWidgetVariantPicker) {
                     placeWidget(showWidgetVariantPicker.blockId, showWidgetVariantPicker.slotIdx, {
                       slug: template.slug,
+                      runtimeWidgetId: template.runtimeWidgetId,
                       category: template.category,
                       title: template.title,
                       description: template.description,

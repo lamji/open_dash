@@ -21,6 +21,8 @@ import {
   Bug,
   ListTodo,
   FileText,
+  Blocks,
+  PanelRightOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -76,6 +78,14 @@ import type {
   UpdateProjectInput,
 } from "@/domain/dashboard/types";
 import { useDashboard } from "./useDashboard";
+import { WidgetCreatorSection } from "./modules/WidgetCreatorSection";
+import { ProjectConfigPanel } from "./modules/ProjectConfigPanel";
+
+function getNavButtonClass(isActive: boolean): string {
+  return isActive
+    ? "flex w-full items-center gap-2.5 rounded-xl bg-cyan-400/10 px-3 py-2 text-[13px] font-semibold text-cyan-300 transition-colors"
+    : "flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[13px] font-medium text-slate-400 transition-colors hover:bg-white/5 hover:text-white";
+}
 
 /* ─── Create Project Dialog ──────────────────────────── */
 
@@ -628,6 +638,7 @@ function ProjectCard({
   project,
   onRowClick,
   onEdit,
+  onOpenPanel,
   onOpenBuilder,
   onViewLive,
   onTogglePublish,
@@ -636,6 +647,7 @@ function ProjectCard({
   project: DashboardProject;
   onRowClick: () => void;
   onEdit: () => void;
+  onOpenPanel: () => void;
   onOpenBuilder: () => void;
   onViewLive: () => void;
   onTogglePublish: () => void;
@@ -694,6 +706,14 @@ function ProjectCard({
               >
                 <Pencil size={14} className="mr-2" />
                 Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                data-test-id={`dashboard-project-open-panel-${project.id}`}
+                onClick={(e) => { e.stopPropagation(); onOpenPanel(); }}
+                className="focus:bg-white/10 focus:text-white"
+              >
+                <PanelRightOpen size={14} className="mr-2" />
+                Open Panel
               </DropdownMenuItem>
               <DropdownMenuItem
                 data-test-id={`dashboard-project-builder-${project.id}`}
@@ -764,17 +784,24 @@ export default function DashboardPage() {
   const {
     selectedProject,
     sheetOpen,
+    currentSection,
     handleLogout,
+    handleOpenDashboard,
     handleOpenBuilder,
     handleViewLive,
     handleRowClick,
     handleCloseSheet,
   } = dashboard;
+  const isDashboardSection = currentSection === "dashboard";
+  const pageTitle = isDashboardSection ? "Dashboard" : "Widget Creator";
+  const sectionTitle = isDashboardSection ? "Projects" : "Custom Widgets";
+  const sectionDescription = isDashboardSection
+    ? "Manage your dashboards, tasks and progress"
+    : "Experiment with custom widgets inside the dashboard layout.";
 
   const totalProjects = dashboard.projects.length;
   const activeProjects = dashboard.projects.filter((p) => p.published).length;
   const draftProjects = totalProjects - activeProjects;
-
   return (
     <div className="flex min-h-screen bg-[#020617] text-slate-100">
       {/* Sidebar */}
@@ -789,7 +816,8 @@ export default function DashboardPage() {
         <nav className="mt-2 flex-1 space-y-0.5 px-3">
           <button
             data-test-id="dashboard-nav-home"
-            className="flex w-full items-center gap-2.5 rounded-xl bg-cyan-400/10 px-3 py-2 text-[13px] font-semibold text-cyan-300 transition-colors"
+            onClick={handleOpenDashboard}
+            className={getNavButtonClass(currentSection === "dashboard")}
           >
             <LayoutDashboard size={16} />
             Dashboard
@@ -800,6 +828,14 @@ export default function DashboardPage() {
           >
             <FolderOpen size={16} />
             Projects
+          </button>
+          <button
+            data-test-id="dashboard-nav-widgets"
+            onClick={dashboard.handleOpenWidgets}
+            className={getNavButtonClass(currentSection === "widgets")}
+          >
+            <Blocks size={16} />
+            Widgets
           </button>
           <button
             data-test-id="dashboard-nav-analytics"
@@ -835,102 +871,124 @@ export default function DashboardPage() {
         {/* Top bar */}
         <header className="sticky top-0 z-20 border-b border-white/10 bg-[#020617]/85 backdrop-blur-md">
           <div className="flex h-14 items-center justify-between px-8">
-            <h1 className="text-[15px] font-bold tracking-tight text-white">Dashboard</h1>
-            <Button
-              data-test-id="dashboard-create-btn"
-              onClick={() => dashboard.setShowCreateDialog(true)}
-              className="h-9 rounded-xl bg-cyan-400 px-4 text-[13px] font-semibold text-slate-950 shadow-sm transition-colors hover:bg-cyan-300"
-            >
-              <Plus size={15} className="mr-1.5" />
-              New Project
-            </Button>
+            <h1 className="text-[15px] font-bold tracking-tight text-white">{pageTitle}</h1>
+            {isDashboardSection ? (
+              <Button
+                data-test-id="dashboard-create-btn"
+                onClick={() => dashboard.setShowCreateDialog(true)}
+                className="h-9 rounded-xl bg-cyan-400 px-4 text-[13px] font-semibold text-slate-950 shadow-sm transition-colors hover:bg-cyan-300"
+              >
+                <Plus size={15} className="mr-1.5" />
+                New Project
+              </Button>
+            ) : null}
           </div>
         </header>
 
-        <div className="mx-auto max-w-5xl px-8 py-6">
-          {/* Stat Cards */}
-          {!dashboard.loading && !dashboard.error && (
-            <div className="mb-8 grid grid-cols-3 gap-4">
-              <StatCard label="Total Projects" value={totalProjects} icon={FolderOpen} accent="bg-indigo-500" />
-              <StatCard label="Active" value={activeProjects} icon={Globe} accent="bg-emerald-500" />
-              <StatCard label="Drafts" value={draftProjects} icon={Pencil} accent="bg-amber-500" />
-            </div>
-          )}
+        <div className="mx-auto max-w-[1380px] px-8 py-6">
+          <div className="min-w-0">
+            {/* Stat Cards */}
+            {isDashboardSection && !dashboard.loading && !dashboard.error && (
+              <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+                <StatCard label="Total Projects" value={totalProjects} icon={FolderOpen} accent="bg-indigo-500" />
+                <StatCard label="Active" value={activeProjects} icon={Globe} accent="bg-emerald-500" />
+                <StatCard label="Drafts" value={draftProjects} icon={Pencil} accent="bg-amber-500" />
+              </div>
+            )}
 
-          {/* Section header */}
-          <div className="mb-5 flex items-end justify-between">
-            <div>
-              <h2 className="text-base font-bold text-white">Projects</h2>
-              <p className="mt-0.5 text-[13px] text-slate-500">
-                Manage your dashboards, tasks and progress
-              </p>
-            </div>
-          </div>
-
-          {/* Loading State */}
-          {dashboard.loading && (
-            <div className="flex items-center justify-center py-24">
-              <Loader2 size={22} className="animate-spin text-indigo-400" />
-            </div>
-          )}
-
-          {/* Error State */}
-          {dashboard.error && !dashboard.loading && (
-            <Card className="border-red-500/20 bg-red-500/10 p-8 text-center shadow-none">
-              <p className="text-sm font-medium text-red-300">{dashboard.error}</p>
-              <Button
-                variant="outline"
-                data-test-id="dashboard-retry"
-                onClick={dashboard.loadProjects}
-                className="mt-4 rounded-xl border-white/15 bg-white/5 text-slate-100 hover:bg-white/10 hover:text-white"
-              >
-                Try Again
-              </Button>
-            </Card>
-          )}
-
-          {/* Empty State */}
-          {!dashboard.loading &&
-            !dashboard.error &&
-            dashboard.projects.length === 0 && (
-              <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/10 bg-[#0f172a] py-16">
-                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/5">
-                  <FolderOpen size={24} className="text-slate-500" />
-                </div>
-                <h2 className="text-base font-semibold text-white">No projects yet</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Create your first project to start building with AI
+            {/* Section header */}
+            <div className="mb-5 flex items-end justify-between">
+              <div>
+                <h2 className="text-base font-bold text-white">{sectionTitle}</h2>
+                <p className="mt-0.5 text-[13px] text-slate-500">
+                  {sectionDescription}
                 </p>
-                <Button
-                  data-test-id="dashboard-empty-create"
-                  onClick={() => dashboard.setShowCreateDialog(true)}
-                  className="mt-6 h-9 rounded-xl bg-cyan-400 px-5 text-[13px] font-semibold text-slate-950 hover:bg-cyan-300"
-                >
-                  <Plus size={15} className="mr-1.5" />
-                  New Project
-                </Button>
+              </div>
+            </div>
+
+            {currentSection === "widgets" ? (
+              <WidgetCreatorSection
+                hasProjects={dashboard.projects.length > 0}
+                activeProjectName={dashboard.latestProject?.name ?? null}
+                sessionId={dashboard.widgetCreatorSessionId}
+                widgets={dashboard.customWidgets}
+                prompt={dashboard.widgetCreatorPrompt}
+                loading={dashboard.widgetCreatorLoading}
+                error={dashboard.widgetCreatorError}
+                onPromptChange={dashboard.handleWidgetCreatorPromptChange}
+                onGenerate={dashboard.handleGenerateWidgetCreator}
+                onCreateProject={() => dashboard.setShowCreateDialog(true)}
+              />
+            ) : null}
+
+            {/* Loading State */}
+            {isDashboardSection && dashboard.loading && (
+              <div className="flex items-center justify-center py-24">
+                <Loader2 size={22} className="animate-spin text-indigo-400" />
               </div>
             )}
 
-          {/* Project Cards Grid */}
-          {!dashboard.loading &&
-            !dashboard.error &&
-            dashboard.projects.length > 0 && (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {dashboard.projects.map((project) => (
-                  <ProjectCard
-                    key={project.id}
-                    project={project}
-                    onRowClick={() => handleRowClick(project)}
-                    onEdit={() => dashboard.setEditingProject(project)}
-                    onOpenBuilder={() => handleOpenBuilder(project)}
-                    onViewLive={() => handleViewLive(project)}
-                    onTogglePublish={() => dashboard.togglePublish(project)}
-                    onDelete={() => dashboard.setDeletingProject(project)}
-                  />
-                ))}
-              </div>
+            {/* Error State */}
+            {isDashboardSection && dashboard.error && !dashboard.loading && (
+              <Card className="border-red-500/20 bg-red-500/10 p-8 text-center shadow-none">
+                <p className="text-sm font-medium text-red-300">{dashboard.error}</p>
+                <Button
+                  variant="outline"
+                  data-test-id="dashboard-retry"
+                  onClick={dashboard.loadProjects}
+                  className="mt-4 rounded-xl border-white/15 bg-white/5 text-slate-100 hover:bg-white/10 hover:text-white"
+                >
+                  Try Again
+                </Button>
+              </Card>
             )}
+
+            {/* Empty State */}
+            {isDashboardSection &&
+              !dashboard.loading &&
+              !dashboard.error &&
+              dashboard.projects.length === 0 && (
+                <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-white/10 bg-[#0f172a] py-16">
+                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/5">
+                    <FolderOpen size={24} className="text-slate-500" />
+                  </div>
+                  <h2 className="text-base font-semibold text-white">No projects yet</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Create your first project to start building with AI
+                  </p>
+                  <Button
+                    data-test-id="dashboard-empty-create"
+                    onClick={() => dashboard.setShowCreateDialog(true)}
+                    className="mt-6 h-9 rounded-xl bg-cyan-400 px-5 text-[13px] font-semibold text-slate-950 hover:bg-cyan-300"
+                  >
+                    <Plus size={15} className="mr-1.5" />
+                    New Project
+                  </Button>
+                </div>
+              )}
+
+            {/* Project Cards Grid */}
+            {isDashboardSection &&
+              !dashboard.loading &&
+              !dashboard.error &&
+              dashboard.projects.length > 0 && (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {dashboard.projects.map((project) => (
+                    <ProjectCard
+                      key={project.id}
+                      project={project}
+                      onRowClick={() => handleRowClick(project)}
+                      onEdit={() => dashboard.setEditingProject(project)}
+                      onOpenPanel={() => dashboard.handleOpenProjectConfigPanel(project)}
+                      onOpenBuilder={() => handleOpenBuilder(project)}
+                      onViewLive={() => handleViewLive(project)}
+                      onTogglePublish={() => dashboard.togglePublish(project)}
+                      onDelete={() => dashboard.setDeletingProject(project)}
+                    />
+                  ))}
+                </div>
+              )}
+          </div>
         </div>
       </main>
 
@@ -977,6 +1035,18 @@ export default function DashboardPage() {
             handleOpenBuilder(selectedProject);
           }
         }}
+      />
+      <ProjectConfigPanel
+        project={dashboard.projectConfigPanelProject}
+        open={dashboard.projectConfigPanelOpen}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            dashboard.handleCloseProjectConfigPanel();
+          }
+        }}
+        onSaveConfig={dashboard.saveProjectConfig}
+        onRunSimulation={dashboard.runProjectConfigSimulation}
+        onPublishProject={dashboard.publishProject}
       />
     </div>
   );

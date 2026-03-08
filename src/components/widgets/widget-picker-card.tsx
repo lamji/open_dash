@@ -2,12 +2,22 @@
 
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import type { WidgetTemplate } from '@/presentation/widgets/useWidgets';
 import { WIDGET_PREVIEWS } from '@/presentation/widgets';
 
+interface WidgetPickerTemplate {
+  id: string;
+  slug: string;
+  runtimeWidgetId?: string;
+  title: string;
+  description?: string;
+  category?: string;
+  jsxCode?: string;
+  widgetData?: Record<string, unknown>;
+}
+
 interface WidgetPickerCardProps {
-  templates: WidgetTemplate[];
-  onSelect: (template: WidgetTemplate) => void;
+  templates: WidgetPickerTemplate[];
+  onSelect: (template: WidgetPickerTemplate) => void;
 }
 
 /**
@@ -17,7 +27,10 @@ interface WidgetPickerCardProps {
  */
 export const WidgetPickerCard = ({ templates, onSelect }: WidgetPickerCardProps) => {
   console.log('Debug flow: WidgetPickerCard fired with', { templateCount: templates.length });
-  const availableTemplates = templates.filter((template) => WIDGET_PREVIEWS[template.slug]);
+  const availableTemplates = templates.filter((template) => {
+    const previewKey = template.runtimeWidgetId ?? template.slug;
+    return WIDGET_PREVIEWS[previewKey];
+  });
 
   if (availableTemplates.length === 0) {
     return (
@@ -30,12 +43,13 @@ export const WidgetPickerCard = ({ templates, onSelect }: WidgetPickerCardProps)
   return (
     <div className="flex flex-wrap gap-6 w-full">
       {availableTemplates.map((template) => {
+        const previewKey = template.runtimeWidgetId ?? template.slug;
         // Detect if this is a table widget
-        const isTableWidget = template.slug.includes("table");
+        const isTableWidget = previewKey.includes("table");
 
         return (
           <div
-            key={template.slug}
+            key={template.id}
             role="button"
             tabIndex={0}
             onClick={() => {
@@ -51,16 +65,16 @@ export const WidgetPickerCard = ({ templates, onSelect }: WidgetPickerCardProps)
             }}
             className="rounded-xl text-left transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
             title={template.title}
-            data-test-id={`widget-picker-card-${template.slug}`}
+            data-test-id={`widget-picker-card-${template.id}`}
           >
             <Card className="flex h-[19rem] w-80 cursor-pointer flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white py-0 shadow-sm transition-shadow duration-200 hover:shadow-lg gap-0">
               {/* Preview Section - Full Card */}
               <CardContent className="flex-1 overflow-hidden bg-slate-50 p-2">
-                {WIDGET_PREVIEWS[template.slug] ? (
+                {WIDGET_PREVIEWS[previewKey] ? (
                   <div className="h-full w-full overflow-hidden rounded-[14px] bg-white px-3 py-2 shadow-[inset_0_0_0_1px_rgba(148,163,184,0.12)]">
                     {isTableWidget
-                      ? WIDGET_PREVIEWS[template.slug]({ ...template.widgetData, _preview: true })
-                      : WIDGET_PREVIEWS[template.slug](template.widgetData ?? {})}
+                      ? WIDGET_PREVIEWS[previewKey]({ ...template.widgetData, _preview: true })
+                      : WIDGET_PREVIEWS[previewKey](template.widgetData ?? {})}
                   </div>
                 ) : (
                   <p className="text-slate-400 text-sm">Preview unavailable</p>

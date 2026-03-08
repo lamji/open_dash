@@ -42,6 +42,39 @@ function cssStringToStyle(css: string): CSSProperties {
   return style as CSSProperties;
 }
 
+function parseGridRatioTracks(block: LayoutBlock): number[] {
+  console.log(`Debug flow: preview parseGridRatioTracks fired with`, { blockId: block.id, gridRatio: block.gridRatio });
+  if (!block.gridRatio) return [];
+  const parts = block.gridRatio
+    .split(" ")
+    .map((part) => Number.parseFloat(part.trim().replace("fr", "")))
+    .filter((part) => Number.isFinite(part) && part > 0);
+  if (parts.length <= block.slots.length) {
+    return parts;
+  }
+  return [...parts.slice(0, Math.max(block.slots.length - 1, 0)), parts[parts.length - 1]];
+}
+
+function getGridTrackScale(trackValues: number[]): number {
+  console.log(`Debug flow: preview getGridTrackScale fired with`, { trackCount: trackValues.length });
+  const maxDecimals = trackValues.reduce((highestValue, trackValue) => {
+    const [, decimals = ""] = trackValue.toString().split(".");
+    return Math.max(highestValue, decimals.length);
+  }, 0);
+  return 10 ** maxDecimals;
+}
+
+function getGridCanvasColumns(block: LayoutBlock): number | null {
+  console.log(`Debug flow: preview getGridCanvasColumns fired with`, { blockId: block.id, slotCount: block.slots.length });
+  const tracks = parseGridRatioTracks(block);
+  if (!block.gridRatio || block.layoutDisplay !== "grid" || tracks.length !== block.slots.length) {
+    return null;
+  }
+  const scale = getGridTrackScale(tracks);
+  const totalTrackColumns = tracks.reduce((sum, trackValue) => sum + Math.round(trackValue * scale), 0);
+  return Math.max(12 * scale, totalTrackColumns);
+}
+
 function getPreviewBlockStyle(block: LayoutBlock): CSSProperties {
   console.log(`Debug flow: getPreviewBlockStyle fired with`, { blockId: block.id, display: block.layoutDisplay });
   const gap = block.gap ? `${block.gap}` : undefined;
@@ -54,10 +87,11 @@ function getPreviewBlockStyle(block: LayoutBlock): CSSProperties {
       alignItems: block.alignItems,
     };
   }
+  const gridCanvasColumns = getGridCanvasColumns(block);
   return {
     gap,
     alignItems: block.alignItems,
-    ...(block.gridRatio ? { gridTemplateColumns: block.gridRatio } : {}),
+    ...(gridCanvasColumns ? { gridTemplateColumns: `repeat(${gridCanvasColumns}, minmax(0, 1fr))` } : {}),
   };
 }
 

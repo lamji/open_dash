@@ -10,8 +10,25 @@ export async function GET(req: Request) {
   console.log(`Debug flow: GET /api/sidebar fired`);
   const ctx = await getProjectContext(req);
   if (isErrorResponse(ctx)) return ctx;
+  const url = new URL(req.url);
+  const forceRefresh = url.searchParams.get("forceRefresh") === "1";
+  console.log(`Debug flow: GET /api/sidebar flags`, { forceRefresh });
 
   const cacheKey = `sidebar:${ctx.projectId}`;
+  if (forceRefresh) {
+    const freshItems = await prisma.sidebarItem.findMany({
+      where: { projectId: ctx.projectId },
+      orderBy: { order: "asc" },
+      include: { children: { orderBy: { order: "asc" } } },
+    });
+    setCache(cacheKey, freshItems, SIDEBAR_CACHE_TTL_MS);
+    console.log(`Debug flow: GET /api/sidebar force refreshed`, {
+      projectId: ctx.projectId,
+      count: freshItems.length,
+    });
+    return NextResponse.json(freshItems);
+  }
+
   const items = await getOrLoadCache(cacheKey, async () => {
     const freshItems = await prisma.sidebarItem.findMany({
       where: { projectId: ctx.projectId },
@@ -61,13 +78,24 @@ export async function POST(req: Request) {
       where: { projectId, parentId: null },
     });
 
-    const item = await prisma.sidebarItem.create({
-      data: {
-        label,
-        slug: `${slug}-${Date.now()}`,
-        order: count,
-        projectId,
-      },
+    const item = await prisma.$transaction(async (tx) => {
+      console.log(`Debug flow: POST /api/sidebar transaction fired`, { projectId, label });
+      const createdItem = await tx.sidebarItem.create({
+        data: {
+          label,
+          slug: `${slug}-${Date.now()}`,
+          order: count,
+          projectId,
+        },
+      });
+
+      await tx.page.create({
+        data: {
+          sidebarItemId: createdItem.id,
+        },
+      });
+
+      return createdItem;
     });
 
     console.log(`Debug flow: POST /api/sidebar created`, { id: item.id, label: item.label, projectId });

@@ -1,5 +1,8 @@
 import { Server as SocketIOServer } from "socket.io";
-import { BUILDER_CACHE_INVALIDATE_EVENT } from "@/domain/cache/types";
+import {
+  BUILDER_CACHE_INVALIDATE_EVENT,
+  PROJECTS_CACHE_INVALIDATE_EVENT,
+} from "@/domain/cache/types";
 
 declare global {
   var __openDashSocketServer: SocketIOServer | undefined;
@@ -24,6 +27,20 @@ export function emitBuilderCacheInvalidation(key: string): void {
   }
   io.emit(BUILDER_CACHE_INVALIDATE_EVENT, {
     key,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+export function emitProjectsCacheInvalidation(): void {
+  console.log(`Debug flow: emitProjectsCacheInvalidation fired`);
+  const io = getSocketServer();
+  if (!io) {
+    console.log(`Debug flow: emitProjectsCacheInvalidation skipped`, {
+      reason: "socket server not initialized",
+    });
+    return;
+  }
+  io.emit(PROJECTS_CACHE_INVALIDATE_EVENT, {
     timestamp: new Date().toISOString(),
   });
 }

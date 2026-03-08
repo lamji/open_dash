@@ -17,6 +17,9 @@ interface WidgetInfo {
   widgetData: Record<string, unknown>;
 }
 
+const BUTTON_POSITION_CLARIFICATION =
+  "Do you want to move the whole button to the right side of the container, or keep it in place and only right-align text/icon inside the button?";
+
 const COLOR_STYLE_PROPS = new Set([
   "color",
   "background",
@@ -109,7 +112,7 @@ function detectAmbiguousStyleIntent(
 
   if (!hasTargetDetail || isShortVagueMessage) {
     const clarificationQuestion = widgetCategory === "button"
-      ? "Do you want to move the whole button to the right side of the container, or keep it in place and only right-align text/icon inside the button?"
+      ? BUTTON_POSITION_CLARIFICATION
       : "Do you want to move the whole widget/container to the right, or only right-align content inside it?";
     const result = { needsClarification: true, clarificationQuestion };
     console.log(`Debug flow: detectAmbiguousStyleIntent result`, result);
@@ -119,6 +122,67 @@ function detectAmbiguousStyleIntent(
   const result = { needsClarification: false };
   console.log(`Debug flow: detectAmbiguousStyleIntent result`, result);
   return result;
+}
+
+function getLastAssistantMessage(history: GroqChatMessage[]): string {
+  console.log(`Debug flow: getLastAssistantMessage fired with`, { historyLength: history.length });
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const entry = history[index];
+    if (entry.role === "assistant") {
+      console.log(`Debug flow: getLastAssistantMessage result`, { found: true, index });
+      return entry.content;
+    }
+  }
+  console.log(`Debug flow: getLastAssistantMessage result`, { found: false, index: -1 });
+  return "";
+}
+
+function resolveClarifiedStyleMessage(
+  message: string,
+  history: GroqChatMessage[],
+  widgetCategory?: string
+): string {
+  console.log(`Debug flow: resolveClarifiedStyleMessage fired with`, {
+    message,
+    historyLength: history.length,
+    widgetCategory,
+  });
+  const lastAssistantMessage = getLastAssistantMessage(history);
+  const normalized = message.toLowerCase().replace(/\s+/g, " ").trim();
+  const isResolvingButtonClarification =
+    widgetCategory === "button"
+      && lastAssistantMessage.toLowerCase().includes(BUTTON_POSITION_CLARIFICATION.toLowerCase());
+
+  if (!isResolvingButtonClarification) {
+    console.log(`Debug flow: resolveClarifiedStyleMessage result`, {
+      resolvedMessage: message,
+      reason: "no-pending-clarification",
+    });
+    return message;
+  }
+
+  const asksForInnerContentAlignment =
+    /\b(text|icon|content|label|title|inside|internal)\b/.test(normalized);
+  if (asksForInnerContentAlignment) {
+    const resolvedMessage = "right-align the text and icon inside the button";
+    console.log(`Debug flow: resolveClarifiedStyleMessage result`, { resolvedMessage, reason: "inner-content" });
+    return resolvedMessage;
+  }
+
+  const confirmsWholeButton =
+    /^(yes|yeah|yep|yup|sure|ok|okay|do it|apply it|whole button|move button|move the button|button|right|to the right)$/.test(normalized) ||
+    (/\b(move|position|place|put)\b/.test(normalized) && /\b(right|end)\b/.test(normalized));
+  if (confirmsWholeButton) {
+    const resolvedMessage = "move the whole button to the right side of the container";
+    console.log(`Debug flow: resolveClarifiedStyleMessage result`, { resolvedMessage, reason: "whole-button" });
+    return resolvedMessage;
+  }
+
+  console.log(`Debug flow: resolveClarifiedStyleMessage result`, {
+    resolvedMessage: message,
+    reason: "unresolved",
+  });
+  return message;
 }
 
 function detectNonStyleContractIntent(
@@ -175,7 +239,8 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`Debug flow: POST /api/builder/ai-style params`, { blockId, slotIdx, blockType, currentCss, widget, hasPromptContext: !!promptContext });
-	    const clarificationDecision = detectAmbiguousStyleIntent(message, widget?.category);
+    const resolvedMessage = resolveClarifiedStyleMessage(message, history ?? [], widget?.category);
+	    const clarificationDecision = detectAmbiguousStyleIntent(resolvedMessage, widget?.category);
 	    if (clarificationDecision.needsClarification) {
       return NextResponse.json({
         ok: true,
@@ -183,7 +248,7 @@ export async function POST(request: NextRequest) {
         clarificationQuestion: clarificationDecision.clarificationQuestion,
 	      });
 	    }
-	    const nonStyleDecision = detectNonStyleContractIntent(message, widget);
+		    const nonStyleDecision = detectNonStyleContractIntent(resolvedMessage, widget);
 	    if (nonStyleDecision.needsClarification) {
 	      return NextResponse.json({
 	        ok: true,
@@ -251,7 +316,7 @@ TARGET ELEMENT:
 ${widgetInfo}
 ${promptContext ? `
 
-LIVE BUILDER CONTEXT SNAPSHOT:
+SELECTED COLUMN JSX CONTEXT:
 ${promptContext}
 ` : ""}
 
@@ -274,8 +339,28 @@ Rules:
     const messages: Groq.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: systemPrompt },
       ...history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-      { role: "user", content: message },
+      { role: "user", content: resolvedMessage },
     ];
+    console.log(`Debug flow: POST /api/builder/ai-style final prompt`, {
+      blockId,
+      slotIdx,
+      targetElementId,
+      isBlockLevel,
+      mode: mode ?? null,
+      currentCssLength: currentCss.length,
+      resolvedMessageLength: resolvedMessage.length,
+      resolvedMessage,
+      promptContextLength: promptContext?.length ?? 0,
+      promptContextPreview: promptContext?.slice(0, 1000) ?? null,
+      systemPromptLength: systemPrompt.length,
+      systemPrompt,
+      historyCount: history.length,
+      historyPreview: history.map((entry, index) => ({
+        index,
+        role: entry.role,
+        contentPreview: entry.content.slice(0, 240),
+      })),
+    });
 
     const completion = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",

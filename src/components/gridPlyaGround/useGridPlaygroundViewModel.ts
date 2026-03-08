@@ -64,7 +64,7 @@ function normalizeGapValue(rawGap: string): string {
   return /^\d+(\.\d+)?$/.test(trimmedGap) ? `${trimmedGap}px` : trimmedGap;
 }
 
-function parseGridRatioSpans(block: LayoutBlock): number[] {
+function parseGridRatioTracks(block: LayoutBlock): number[] {
   console.log("Debug flow: parseGridRatioSpans fired with", { blockId: block.id, gridRatio: block.gridRatio });
   if (!block.gridRatio) return [];
   const parts = block.gridRatio
@@ -79,22 +79,24 @@ function parseGridRatioSpans(block: LayoutBlock): number[] {
   return [...parts.slice(0, Math.max(block.slots.length - 1, 0)), parts[parts.length - 1]];
 }
 
-function getBetweenOffsetColumns(freeColumns: number, slotCount: number, slotIdx: number): number {
-  console.log("Debug flow: getBetweenOffsetColumns fired with", { freeColumns, slotCount, slotIdx });
-  const gapCount = Math.max(slotCount - 1, 0);
-  if (gapCount === 0 || freeColumns === 0 || slotIdx === 0) {
-    return 0;
+function getGridTrackScale(trackValues: number[]): number {
+  console.log("Debug flow: getGridTrackScale fired with", { trackCount: trackValues.length });
+  const maxDecimals = trackValues.reduce((highestValue, trackValue) => {
+    const [, decimals = ""] = trackValue.toString().split(".");
+    return Math.max(highestValue, decimals.length);
+  }, 0);
+  return 10 ** maxDecimals;
+}
+
+export function getGridPlaygroundCanvasColumns(block: LayoutBlock): number | null {
+  console.log("Debug flow: getGridPlaygroundCanvasColumns fired with", { blockId: block.id, slotCount: block.slots.length });
+  const tracks = parseGridRatioTracks(block);
+  if (!block.gridRatio || block.layoutDisplay !== "grid" || tracks.length !== block.slots.length) {
+    return null;
   }
-
-  const baseGap = Math.floor(freeColumns / gapCount);
-  const remainder = freeColumns % gapCount;
-  let offset = 0;
-
-  for (let gapIdx = 0; gapIdx < slotIdx; gapIdx += 1) {
-    offset += baseGap + (gapIdx < remainder ? 1 : 0);
-  }
-
-  return offset;
+  const scale = getGridTrackScale(tracks);
+  const totalTrackColumns = tracks.reduce((sum, trackValue) => sum + Math.round(trackValue * scale), 0);
+  return Math.max(12 * scale, totalTrackColumns);
 }
 
 export function getGridPlaygroundSlotPlacement(block: LayoutBlock, slotIdx: number): CSSProperties {
@@ -104,26 +106,24 @@ export function getGridPlaygroundSlotPlacement(block: LayoutBlock, slotIdx: numb
     justifyContent: block.justifyContent,
     layoutDisplay: block.layoutDisplay,
   });
-  const spans = parseGridRatioSpans(block);
-  if (!block.gridRatio || block.layoutDisplay !== "grid" || spans.length !== block.slots.length) {
+  const tracks = parseGridRatioTracks(block);
+  if (!block.gridRatio || block.layoutDisplay !== "grid" || tracks.length !== block.slots.length) {
     return {};
   }
-
-  const span = spans[slotIdx] ?? 1;
-  const totalSpan = spans.reduce((sum, current) => sum + current, 0);
-  const freeColumns = Math.max(12 - totalSpan, 0);
-  const baseOffset =
-    block.justifyContent === "end"
-      ? freeColumns
-      : block.justifyContent === "center"
-        ? Math.floor(freeColumns / 2)
-        : block.justifyContent === "between"
-          ? getBetweenOffsetColumns(freeColumns, spans.length, slotIdx)
-          : 0;
-
-  const beforeSpan = spans.slice(0, slotIdx).reduce((sum, current) => sum + current, 0);
-  const start = 1 + baseOffset + beforeSpan;
-  return { gridColumn: `${start} / span ${span}` };
+  const scale = getGridTrackScale(tracks);
+  const scaledTracks = tracks.map((trackValue) => Math.round(trackValue * scale));
+  const startColumn = scaledTracks.slice(0, slotIdx).reduce((sum, trackValue) => sum + trackValue, 0) + 1;
+  const spanColumns = scaledTracks[slotIdx];
+  console.log("Debug flow: getGridPlaygroundSlotPlacement arbitrary-track mode", {
+    blockId: block.id,
+    slotIdx,
+    trackValue: tracks[slotIdx] ?? null,
+    startColumn,
+    spanColumns,
+  });
+  return {
+    gridColumn: `${startColumn} / span ${spanColumns}`,
+  };
 }
 
 const gridPlaygroundSlice = createSlice({
@@ -205,7 +205,7 @@ export function useGridPlaygroundViewModel(props: GridPlaygroundViewModelProps):
   }, [props.block, dispatch]);
 
   const columnCount = props.block?.slots.length ?? 2;
-  const exampleInput = columnCount === 2 ? "2/8" : columnCount === 3 ? "5/2/5" : "4/4/2/2";
+    const exampleInput = columnCount === 2 ? "1.4/1" : columnCount === 3 ? "5/2.2/1.1" : "3/1.5/1/0.8";
 
   const handleCancel = () => {
     console.log("Debug flow: handleCancel grid playground fired with", { blockId: props.block?.id ?? null });
@@ -244,12 +244,6 @@ export function useGridPlaygroundViewModel(props: GridPlaygroundViewModelProps):
     const numbers = parts.map((part) => Number.parseFloat(part.trim()));
     if (numbers.some((numberValue) => Number.isNaN(numberValue) || numberValue <= 0)) {
       dispatch(gridPlaygroundSlice.actions.setError({ value: "All values must be positive numbers" }));
-      return;
-    }
-
-    const total = numbers.reduce((sum, current) => sum + current, 0);
-    if (total > 12) {
-      dispatch(gridPlaygroundSlice.actions.setError({ value: "Sum cannot exceed 12" }));
       return;
     }
 

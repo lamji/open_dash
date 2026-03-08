@@ -18,6 +18,22 @@ export interface DocFeature {
   icon: string;
 }
 
+export interface DocTutorialStep {
+  title: string;
+  description: string;
+}
+
+export interface DocSecurityNote {
+  title: string;
+  description: string;
+}
+
+export interface DocTutorialSection {
+  intro: string;
+  steps: DocTutorialStep[];
+  securityNotes: DocSecurityNote[];
+}
+
 export interface DocsState {
   activeSection: string;
   activeSubSection: string;

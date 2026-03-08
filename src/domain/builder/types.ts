@@ -2,7 +2,7 @@ import type { WidgetCategory } from "@/domain/widgets/types";
 
 export type LayoutType = "single" | "grid-2" | "grid-3" | "grid-4";
 
-export type CodeEditorTab = "css" | "data" | "function";
+export type CodeEditorTab = "css" | "data" | "icons" | "function";
 
 export interface PlacedWidget {
   widgetId: string;

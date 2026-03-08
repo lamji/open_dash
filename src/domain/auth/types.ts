@@ -71,6 +71,7 @@ export interface LoginState {
   form: LoginFormData;
   errors: LoginFormErrors;
   isSubmitting: boolean;
+  isPublishedMode: boolean;
   setField: (field: keyof LoginFormData, value: string) => void;
   handleSubmit: () => Promise<void>;
 }

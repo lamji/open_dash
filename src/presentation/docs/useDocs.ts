@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import type { DocSection, DocsState } from "@/domain/docs/types";
+import type { DocSection, DocsState, DocTutorialSection } from "@/domain/docs/types";
 
 export const DOC_SECTIONS: DocSection[] = [
   {
@@ -14,7 +14,7 @@ export const DOC_SECTIONS: DocSection[] = [
       { id: "dash-projects", title: "Project Management", anchor: "dashboard-projects" },
       { id: "dash-sidebar", title: "Sidebar Navigation", anchor: "dashboard-sidebar" },
       { id: "dash-sheet", title: "Project Detail Sheet", anchor: "dashboard-sheet" },
-      { id: "dash-api", title: "API Layer", anchor: "dashboard-api" },
+      { id: "dash-api", title: "API Security", anchor: "dashboard-api" },
     ],
   },
   {
@@ -34,6 +34,55 @@ export const DOC_SECTIONS: DocSection[] = [
     ],
   },
 ];
+
+export const DASHBOARD_API_SECURITY_TUTORIAL: DocTutorialSection = {
+  intro:
+    "Use Project Config when your published dashboard needs a remote login check or protected API URLs. The important rule is order: enter your secret key first, then save any endpoint you want OpenDash to protect.",
+  steps: [
+    {
+      title: "1. Enter your own secret key",
+      description:
+        "Add a secret key in the right-side Project Config panel before saving a Login Endpoint URL, Custom Service URL, or per-navigation API URL. OpenDash uses that key to encrypt each endpoint value before it is persisted.",
+    },
+    {
+      title: "2. Save the protected endpoints",
+      description:
+        "When you save the Login Endpoint URL, Custom Service URL, or integration URLs, OpenDash stores encrypted versions of those values instead of plaintext project config fields.",
+    },
+    {
+      title: "3. Turn on Require Login for published access",
+      description:
+        "Enable the login toggle if viewers must authenticate before opening the published preview. When this is on, OpenDash protects the published layout rather than exposing it directly.",
+    },
+    {
+      title: "4. Published viewers are routed through /login",
+      description:
+        "Unauthenticated requests to /preview/:id are redirected to /login?next=/preview/:id. After the remote login endpoint confirms access, OpenDash issues a short-lived published-access cookie for that specific layout.",
+    },
+  ],
+  securityNotes: [
+    {
+      title: "Endpoints are encrypted at rest",
+      description:
+        "Login endpoint, custom service URL, and per-navigation integration URLs are encrypted before they are saved, so they are not stored as readable plaintext in the database.",
+    },
+    {
+      title: "Your secret key is also protected",
+      description:
+        "The secret key itself is encrypted again before it is stored in project_advanced_config. That means OpenDash does not keep the key as raw plaintext in that config record either.",
+    },
+    {
+      title: "Decryption happens only when needed",
+      description:
+        "OpenDash decrypts endpoint values only at runtime for tasks that require them, such as published login verification or API simulation. The normal saved project record keeps the encrypted form.",
+    },
+    {
+      title: "Published access is session-scoped",
+      description:
+        "A successful published login does not unlock every dashboard. OpenDash creates a short-lived cookie tied to the current project/layout pair, which is then checked before allowing access to that preview.",
+    },
+  ],
+};
 
 export function useDocs() {
   if (process.env.NODE_ENV !== "production") {
@@ -98,6 +147,7 @@ export function useDocs() {
     ...state,
     activeSection,
     activeSubSection,
+    dashboardApiSecurityTutorial: DASHBOARD_API_SECURITY_TUTORIAL,
     sections: filteredSections,
     setActiveSection,
     setActiveSubSection,

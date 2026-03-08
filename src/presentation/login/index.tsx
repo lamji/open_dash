@@ -11,7 +11,7 @@ import { useLogin } from "./useLogin";
 
 export default function LoginPage() {
   console.debug("[auth] LoginPage:render");
-  const { form, errors, isSubmitting, setField, handleSubmit } = useLogin();
+  const { form, errors, isSubmitting, isPublishedMode, setField, handleSubmit } = useLogin();
   const [showPassword, setShowPassword] = React.useState(false);
 
   const onSubmit = (e: React.FormEvent) => {
@@ -162,7 +162,9 @@ export default function LoginPage() {
             <div className="space-y-1.5 pb-8">
               <h1 className="text-2xl font-bold text-white">Welcome back</h1>
               <p className="text-sm text-zinc-500">
-                Log in to your OpenDash account
+                {isPublishedMode
+                  ? "Log in to access this published dashboard"
+                  : "Log in to your OpenDash account"}
               </p>
             </div>
 
@@ -242,7 +244,7 @@ export default function LoginPage() {
                 {isSubmitting ? (
                   <>
                     <Loader2 size={16} className="mr-2 animate-spin" />
-                    Logging in...
+                    {isPublishedMode ? "Verifying access..." : "Logging in..."}
                   </>
                 ) : (
                   "Log In"
@@ -250,16 +252,18 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <p className="mt-8 text-center text-sm text-zinc-500">
-              Don&apos;t have an account?{" "}
-              <Link
-                href="/signup"
-                className="font-medium text-violet-400 hover:text-violet-300 transition-colors"
-                data-test-id="login-signup-link"
-              >
-                Sign up
-              </Link>
-            </p>
+            {!isPublishedMode && (
+              <p className="mt-8 text-center text-sm text-zinc-500">
+                Don&apos;t have an account?{" "}
+                <Link
+                  href="/signup"
+                  className="font-medium text-violet-400 hover:text-violet-300 transition-colors"
+                  data-test-id="login-signup-link"
+                >
+                  Sign up
+                </Link>
+              </p>
+            )}
           </div>
         </div>
       </div>

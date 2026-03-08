@@ -7,6 +7,7 @@ interface WidgetCategoryPickerDialogProps {
   closeWidgetCategoryModal: () => void;
   setSelectedSlot: (slot: { blockId: string; slotIdx: number } | null) => void;
   widgetTemplates: WidgetTemplate[];
+  customWidgetCount: number;
   loadingTemplates: boolean;
   handleCategoryClick: (categoryId: string) => void;
 }
@@ -16,6 +17,7 @@ export function WidgetCategoryPickerDialog({
   closeWidgetCategoryModal,
   setSelectedSlot,
   widgetTemplates,
+  customWidgetCount,
   loadingTemplates,
   handleCategoryClick,
 }: WidgetCategoryPickerDialogProps) {
@@ -45,6 +47,21 @@ export function WidgetCategoryPickerDialog({
               </button>
             );
           })}
+          <div className="mt-3 border-t border-slate-200 pt-3">
+            <button
+              onClick={() => handleCategoryClick("custom")}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-lg hover:bg-slate-50 transition-colors text-left"
+              data-test-id="builder-category-option-custom"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full flex-shrink-0 bg-cyan-500" />
+                <span className="text-sm font-medium text-slate-700">Custom Widgets</span>
+              </div>
+              {!loadingTemplates && (
+                <span className="text-xs text-slate-400">{customWidgetCount} widgets</span>
+              )}
+            </button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

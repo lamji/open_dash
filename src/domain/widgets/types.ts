@@ -1,6 +1,7 @@
 export interface WidgetTemplate {
   id: string;
   slug: string;
+  runtimeWidgetId?: string;
   title: string;
   description: string;
   category: WidgetCategory;

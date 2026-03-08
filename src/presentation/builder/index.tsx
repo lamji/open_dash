@@ -58,6 +58,7 @@ export default function BuilderShell() {
   const {
     blocks,
     navItems,
+    activeNavItemId,
     navItemModalOpen,
     addingNavItem,
     loadingNavItems,
@@ -66,9 +67,11 @@ export default function BuilderShell() {
     showWidgetTypePicker,
     showWidgetVariantPicker,
     widgetTemplates,
+    customWidgetTemplates,
     loadingTemplates,
     variantTemplates,
     previewMode,
+    isDraftRestoring,
     savingLayout,
     autosaveState,
     projectId,
@@ -85,6 +88,7 @@ export default function BuilderShell() {
     groqChatLoading,
     layoutId,
     setLayoutId,
+    setActiveNavItemId,
     dataJsonError,
     setDataJsonError,
     togglePreview,
@@ -97,7 +101,7 @@ export default function BuilderShell() {
     openWidgetVariantPicker,
     closeWidgetVariantPicker,
     placeWidget,
-    removeWidget,
+    clearSlotContent,
     openNavItemModal,
     closeNavItemModal,
     addNavItem,
@@ -294,6 +298,7 @@ export default function BuilderShell() {
     const slotPlacementStyle = getGridPlaygroundSlotPlacement(block, slotIdx);
     const hasCustomStyle = Object.keys(slotStyle).length > 0;
     const hasChildren = childBlocks.length > 0;
+    const isButtonWidget = widget?.category === "button";
     const slotKey = `${block.id}-${slotIdx}`;
     const measuredSlotWidth = slotWidths[slotKey] ?? 9999;
     const isNestedSlot = depth > 0;
@@ -313,6 +318,7 @@ export default function BuilderShell() {
       ...(!isNestedSlot ? { alignSelf: "stretch" } : {}),
       ...(shouldApplyDefaultSlotMinHeight ? { minHeight: "300px" } : {}),
       ...(isNestedSlot && !slotHasHeightOverride ? { minHeight: "0px" } : {}),
+      padding: "20px",
       ...(hasChildren
         ? {
             display: "flex",
@@ -332,7 +338,7 @@ export default function BuilderShell() {
             delete slotRefs.current[slotKey];
           }
         }}
-        className={`relative w-full min-w-0 rounded-[28px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-28px_rgba(15,23,42,0.35)] ${!hasCustomStyle && !widget && !hasChildren ? "bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]" : ""} ${hasChildren ? "p-4" : "p-3"}`}
+        className={`relative w-full min-w-0 rounded-[28px] border border-slate-200/80 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.35)] ${!hasCustomStyle && !widget && !hasChildren ? "bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]" : ""}`}
         style={{ ...slotBaseStyle, ...slotStyle, ...slotPlacementStyle }}
         data-test-id={`builder-slot-${block.id}-${slotIdx}`}
       >
@@ -357,7 +363,7 @@ export default function BuilderShell() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                removeWidget(block.id, slotIdx);
+                clearSlotContent(block.id, slotIdx);
               }}
               className="rounded-full border border-slate-200 bg-white p-1.5 text-slate-400 shadow-sm transition-colors hover:border-red-200 hover:text-red-500"
               title="Clear column content"
@@ -401,7 +407,7 @@ export default function BuilderShell() {
                     <Pencil className="w-3 h-3" />
                   </button>
                   <button
-                    onClick={() => removeWidget(block.id, slotIdx)}
+                    onClick={() => clearSlotContent(block.id, slotIdx)}
                     className="ml-1 flex-shrink-0 rounded-full border border-transparent p-1.5 text-slate-400 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-500"
                     data-test-id={`builder-slot-clear-${block.id}-${slotIdx}`}
                   >
@@ -410,8 +416,17 @@ export default function BuilderShell() {
                 </div>
               </div>
             )}
-            <div className="w-full flex-1 min-h-0 min-w-0 overflow-hidden" data-test-id={`builder-slot-widget-${block.id}-${slotIdx}`}>
-              <div className="min-w-0 h-full">
+            <div
+              className="flex flex-1 min-h-0 min-w-0 overflow-hidden"
+              style={isButtonWidget
+                ? {
+                    justifyContent: slotStyle.justifyContent,
+                    alignItems: slotStyle.alignItems,
+                  }
+                : undefined}
+              data-test-id={`builder-slot-widget-${block.id}-${slotIdx}`}
+            >
+              <div className={isButtonWidget ? "inline-flex min-w-0 max-w-full" : "min-w-0 h-full w-full"}>
                 {WIDGET_PREVIEWS[widget.widgetId]
                   ? WIDGET_PREVIEWS[widget.widgetId](widget.widgetData)
                   : <span className="text-slate-400 text-xs">No preview</span>
@@ -495,7 +510,7 @@ export default function BuilderShell() {
                     <Pencil className="w-3 h-3" />
                   </button>
                   <button
-                    onClick={() => removeWidget(block.id, slotIdx)}
+                    onClick={() => clearSlotContent(block.id, slotIdx)}
                     className="rounded-full border border-transparent p-1.5 text-slate-400 transition-colors hover:border-red-100 hover:bg-red-50 hover:text-red-500"
                     title="Clear column content"
                     data-test-id={`builder-slot-children-clear-${block.id}-${slotIdx}`}
@@ -505,7 +520,7 @@ export default function BuilderShell() {
                 </div>
               </div>
             )}
-            <div className="flex-1 min-h-0 rounded-[24px] border border-slate-200/80 bg-slate-50/70 p-4">
+            <div className="flex-1 min-h-0">
               <div className="space-y-3 min-h-0">
                 {childBlocks.map((childBlock) => renderBlock(childBlock, depth + 1))}
               </div>
@@ -578,6 +593,10 @@ export default function BuilderShell() {
   };
 
   const selectedGridBlock = gridRatioModal ? findBlock(blocks, gridRatioModal.blockId) : null;
+  const isBuilderHydrating =
+    loadingNavItems ||
+    isDraftRestoring ||
+    (!!projectId && navItems.length > 0 && !activeNavItemId);
 
   return (
     <div className="flex h-screen overflow-hidden bg-[linear-gradient(180deg,#f8fafc_0%,#eef4ff_48%,#f8fafc_100%)]" data-test-id="builder-shell">
@@ -606,19 +625,26 @@ export default function BuilderShell() {
               {navItems.map((item) => (
                 <div
                   key={item.id}
-                  className="group flex cursor-pointer items-center gap-3 rounded-2xl border border-transparent bg-white/80 px-3 py-3 text-xs font-medium text-slate-700 shadow-[0_10px_30px_-28px_rgba(15,23,42,0.5)] transition-all hover:border-slate-200 hover:bg-white"
+                  onClick={() => setActiveNavItemId(item.id)}
+                  className={`group flex cursor-pointer items-center gap-3 rounded-2xl border px-3 py-3 text-xs font-medium shadow-[0_10px_30px_-28px_rgba(15,23,42,0.5)] transition-all ${
+                    activeNavItemId === item.id
+                      ? "border-blue-200 bg-blue-50 text-blue-900"
+                      : "border-transparent bg-white/80 text-slate-700 hover:border-slate-200 hover:bg-white"
+                  }`}
                   data-test-id={`builder-nav-item-${item.id}`}
                 >
-                  <div className="h-2 w-2 flex-shrink-0 rounded-full bg-blue-500" />
+                  <div className={`h-2 w-2 flex-shrink-0 rounded-full ${activeNavItemId === item.id ? "bg-blue-600" : "bg-blue-500"}`} />
                   <span className="truncate flex-1">{item.label}</span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); removeNavItem(item.id); }}
-                    className="flex-shrink-0 text-slate-300 opacity-0 transition-all hover:text-red-500 group-hover:opacity-100"
-                    title="Delete nav item"
-                    data-test-id={`builder-nav-item-delete-${item.id}`}
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
+                  {!previewMode && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); removeNavItem(item.id); }}
+                      className="flex-shrink-0 text-slate-300 opacity-0 transition-all hover:text-red-500 group-hover:opacity-100"
+                      title="Delete nav item"
+                      data-test-id={`builder-nav-item-delete-${item.id}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -706,15 +732,23 @@ export default function BuilderShell() {
 
         {/* Canvas */}
         <div className="flex-1 overflow-auto px-8 py-8" data-test-id="builder-canvas">
-          {blocks.length === 0 && (
+          {isBuilderHydrating && (
+            <div className="rounded-3xl border border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500" data-test-id="builder-restore-loading">
+              Loading saved layout styles...
+            </div>
+          )}
+
+          {!isBuilderHydrating && blocks.length === 0 && (
             <EmptyStateSection openLayoutPicker={openLayoutPicker} navItems={navItems} />
           )}
 
-          <div className="w-full space-y-5" data-test-id="builder-blocks">
-            {blocks.map((block) => renderBlock(block))}
-          </div>
+          {!isBuilderHydrating && (
+            <div className="w-full space-y-5" data-test-id="builder-blocks">
+              {blocks.map((block) => renderBlock(block))}
+            </div>
+          )}
 
-          {blocks.length > 0 && !previewMode && (
+          {!isBuilderHydrating && blocks.length > 0 && !previewMode && (
             <div className="mt-6 flex justify-center" data-test-id="builder-add-more-row">
               <button
                 onClick={openLayoutPicker}
@@ -771,6 +805,7 @@ export default function BuilderShell() {
         closeWidgetCategoryModal={closeWidgetCategoryModal}
         setSelectedSlot={setSelectedSlot}
         widgetTemplates={widgetTemplates}
+        customWidgetCount={customWidgetTemplates.length}
         loadingTemplates={loadingTemplates}
         handleCategoryClick={handleCategoryClick}
       />

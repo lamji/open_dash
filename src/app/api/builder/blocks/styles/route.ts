@@ -4,6 +4,44 @@ import { prisma } from "@/lib/prisma";
 import { validateSession, SESSION_COOKIE_NAME } from "@/lib/auth";
 import type { LayoutBlock } from "@/domain/builder/types";
 
+function normalizeLayoutBlocksForPersistence(blocks: LayoutBlock[]): LayoutBlock[] {
+  console.log(`Debug flow: normalizeLayoutBlocksForPersistence fired`, { blockCount: blocks.length });
+  return blocks.map((block) => ({
+    ...block,
+    slots: Array.isArray(block.slots)
+      ? block.slots.map((slot) => {
+          if (!slot || typeof slot !== "object") {
+            return { widget: null, childBlocks: [] };
+          }
+          if ("widget" in slot) {
+            return {
+              widget: slot.widget ?? null,
+              childBlocks: normalizeLayoutBlocksForPersistence(
+                Array.isArray(slot.childBlocks) ? slot.childBlocks : []
+              ),
+            };
+          }
+          return {
+            widget: slot,
+            childBlocks: [],
+          };
+        })
+      : [],
+  }));
+}
+
+async function createDraftLayoutFromBlocks(blocks: LayoutBlock[]): Promise<string> {
+  console.log(`Debug flow: createDraftLayoutFromBlocks fired`, { blockCount: blocks.length });
+  const draftRecord = await prisma.dashboardLayout.create({
+    data: {
+      name: "Draft Layout",
+      layout: JSON.stringify(blocks),
+    },
+  });
+  console.log(`Debug flow: createDraftLayoutFromBlocks created`, { layoutId: draftRecord.id });
+  return draftRecord.id;
+}
+
 function updateBlockInTree(
   blocks: LayoutBlock[],
   blockId: string,
@@ -83,17 +121,20 @@ export async function PATCH(request: NextRequest) {
     let layout: LayoutBlock[] = [];
 
     if (blocks && blocks.length > 0) {
-      layout = blocks;
+      layout = normalizeLayoutBlocksForPersistence(blocks);
       if (!layoutId) {
         console.log(`Debug flow: PATCH /api/builder/blocks/styles creating draft layout`, { blockCount: blocks.length });
-        const draftRecord = await prisma.dashboardLayout.create({
-          data: {
-            name: "Draft Layout",
-            layout: JSON.stringify(layout),
-          },
-        });
-        finalLayoutId = draftRecord.id;
+        finalLayoutId = await createDraftLayoutFromBlocks(layout);
         console.log(`Debug flow: PATCH /api/builder/blocks/styles draft created`, { layoutId: finalLayoutId });
+      } else {
+        const existingDraft = await prisma.dashboardLayout.findUnique({
+          where: { id: layoutId },
+          select: { id: true },
+        });
+        if (!existingDraft) {
+          console.warn(`Debug flow: PATCH /api/builder/blocks/styles stale layoutId recovery`, { staleLayoutId: layoutId });
+          finalLayoutId = await createDraftLayoutFromBlocks(layout);
+        }
       }
     } else if (layoutId) {
       const record = await prisma.dashboardLayout.findUnique({ where: { id: layoutId } });
@@ -102,7 +143,7 @@ export async function PATCH(request: NextRequest) {
       }
 
       try {
-        layout = JSON.parse(record.layout) as LayoutBlock[];
+        layout = normalizeLayoutBlocksForPersistence(JSON.parse(record.layout) as LayoutBlock[]);
       } catch {
         return NextResponse.json({ ok: false, error: "Invalid layout JSON" }, { status: 500 });
       }
@@ -120,7 +161,7 @@ export async function PATCH(request: NextRequest) {
       }
       return {
         ...block,
-        ...(slotIdx >= 0 ? { columnStyles: styles } : { blockStyles: css || block.blockStyles }),
+        ...(slotIdx >= 0 ? { columnStyles: styles } : { blockStyles: css }),
         ...(gridRatio !== undefined ? { gridRatio } : {}),
       };
     });
@@ -129,6 +170,12 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "Block not found in layout" }, { status: 404 });
     }
 
+    console.log(`Debug flow: PATCH /api/builder/blocks/styles persisting`, {
+      finalLayoutId,
+      blockId,
+      slotIdx,
+      blockCount: result.blocks.length,
+    });
     await prisma.dashboardLayout.update({
       where: { id: finalLayoutId },
       data: { layout: JSON.stringify(result.blocks) },

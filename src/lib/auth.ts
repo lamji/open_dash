@@ -1,9 +1,31 @@
 import { randomBytes, scrypt, timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/prisma";
+import { redisDel, redisGetJson, redisSetJson } from "@/lib/redis";
 
 const SALT_LENGTH = 32;
 const KEY_LENGTH = 64;
 const SESSION_EXPIRY_HOURS = 72;
+const SESSION_CACHE_KEY_PREFIX = "session:";
+
+interface SessionValidationResult {
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    createdAt: string;
+  };
+  session: {
+    id: string;
+    token: string;
+    userId: string;
+    expiresAt: string;
+  };
+}
+
+function buildSessionCacheKey(token: string): string {
+  console.log(`Debug flow: buildSessionCacheKey fired`);
+  return `${SESSION_CACHE_KEY_PREFIX}${token}`;
+}
 
 // ─── Password Hashing (scrypt, no external deps) ───────────
 
@@ -37,6 +59,7 @@ export async function verifyPassword(
 // ─── Session Management ─────────────────────────────────────
 
 export async function createSession(userId: string): Promise<string> {
+  console.log(`Debug flow: createSession fired`, { userId });
   const token = randomBytes(32).toString("hex");
   const expiresAt = new Date(Date.now() + SESSION_EXPIRY_HOURS * 60 * 60 * 1000);
 
@@ -48,7 +71,17 @@ export async function createSession(userId: string): Promise<string> {
 }
 
 export async function validateSession(token: string) {
+  console.log(`Debug flow: validateSession fired`, { hasToken: !!token });
   if (!token) return null;
+  const cacheKey = buildSessionCacheKey(token);
+  const cached = await redisGetJson<SessionValidationResult>(cacheKey);
+  if (cached) {
+    if (new Date(cached.session.expiresAt) > new Date()) {
+      console.log(`Debug flow: validateSession cache hit`, { cacheKey });
+      return cached;
+    }
+    void redisDel(cacheKey);
+  }
 
   const session = await prisma.session.findUnique({
     where: { token },
@@ -58,10 +91,11 @@ export async function validateSession(token: string) {
   if (!session) return null;
   if (new Date(session.expiresAt) < new Date()) {
     await prisma.session.delete({ where: { id: session.id } }).catch(() => {});
+    void redisDel(cacheKey);
     return null;
   }
 
-  return {
+  const result: SessionValidationResult = {
     user: {
       id: session.user.id,
       email: session.user.email,
@@ -75,10 +109,16 @@ export async function validateSession(token: string) {
       expiresAt: session.expiresAt.toISOString(),
     },
   };
+  const ttlMs = Math.max(1000, new Date(result.session.expiresAt).getTime() - Date.now());
+  void redisSetJson(cacheKey, result, ttlMs);
+
+  return result;
 }
 
 export async function deleteSession(token: string): Promise<void> {
+  console.log(`Debug flow: deleteSession fired`, { hasToken: !!token });
   await prisma.session.deleteMany({ where: { token } });
+  await redisDel(buildSessionCacheKey(token));
 }
 
 // ─── Rate Limiter (in-memory, per-process) ──────────────────

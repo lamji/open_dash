@@ -14,6 +14,153 @@ interface BuilderPromptContextResult {
   promptContext: string;
 }
 
+function formatJsxScalar(value: unknown): string {
+  console.log(`Debug flow: formatJsxScalar fired with`, { valueType: typeof value, isArray: Array.isArray(value) });
+  if (typeof value === "string") {
+    return JSON.stringify(value);
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return `{${String(value)}}`;
+  }
+  if (value === null) {
+    return "{null}";
+  }
+  return JSON.stringify(value);
+}
+
+function toPascalCase(value: string): string {
+  console.log(`Debug flow: toPascalCase fired with`, { value });
+  const segments = value
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  const result = segments.map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1)).join("") || "Widget";
+  console.log(`Debug flow: toPascalCase result`, { result });
+  return result;
+}
+
+function indentLines(value: string, depth: number): string {
+  console.log(`Debug flow: indentLines fired with`, { depth, length: value.length });
+  const padding = "  ".repeat(depth);
+  return value
+    .split("\n")
+    .map((line) => `${padding}${line}`)
+    .join("\n");
+}
+
+function serializePropsToJsx(props: Record<string, unknown>, depth: number): string[] {
+  console.log(`Debug flow: serializePropsToJsx fired with`, { depth, propCount: Object.keys(props).length });
+  return Object.entries(props).flatMap(([key, value]) => {
+    if (value === undefined) {
+      return [];
+    }
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean" ||
+      value === null
+    ) {
+      return [`${key}=${formatJsxScalar(value)}`];
+    }
+    return [`${key}={${JSON.stringify(value, null, 2).replace(/\n/g, `\n${"  ".repeat(depth + 1)}`)}}`];
+  });
+}
+
+function serializeWidgetToJsx(widget: PlacedWidget, depth = 0): string {
+  console.log(`Debug flow: serializeWidgetToJsx fired with`, { depth, widgetId: widget.widgetId, category: widget.category });
+  const componentName = `${toPascalCase(widget.widgetId)}Widget`;
+  const propLines = serializePropsToJsx(
+    {
+      title: widget.title,
+      widgetId: widget.widgetId,
+      category: widget.category,
+      ...widget.widgetData,
+    },
+    depth
+  );
+  if (propLines.length === 0) {
+    return indentLines(`<${componentName} />`, depth);
+  }
+  return [
+    indentLines(`<${componentName}`, depth),
+    ...propLines.map((line) => indentLines(line, depth + 1)),
+    indentLines("/>", depth),
+  ].join("\n");
+}
+
+function serializeSlotToJsx(slot: LayoutSlot, slotIdx: number, depth = 0): string {
+  console.log(`Debug flow: serializeSlotToJsx fired with`, {
+    slotIdx,
+    depth,
+    hasWidget: !!slot.widget,
+    childBlockCount: slot.childBlocks?.length ?? 0,
+  });
+  const children: string[] = [];
+  if (slot.widget) {
+    children.push(serializeWidgetToJsx(slot.widget, depth + 1));
+  }
+  (slot.childBlocks ?? []).forEach((childBlock) => {
+    children.push(serializeBlockToJsx(childBlock, depth + 1));
+  });
+  if (children.length === 0) {
+    children.push(indentLines("{/* empty slot */}", depth + 1));
+  }
+  return [
+    indentLines(`<Column slotIndex={${slotIdx}}>` , depth),
+    ...children,
+    indentLines(`</Column>`, depth),
+  ].join("\n");
+}
+
+function serializeBlockToJsx(block: LayoutBlock, depth = 0): string {
+  console.log(`Debug flow: serializeBlockToJsx fired with`, { blockId: block.id, blockType: block.type, depth });
+  const header = `<LayoutBlock id=${JSON.stringify(block.id)} type=${JSON.stringify(block.type)}>`;
+  const children = block.slots.map((slot, slotIdx) => serializeSlotToJsx(slot, slotIdx, depth + 1));
+  return [
+    indentLines(header, depth),
+    ...children,
+    indentLines(`</LayoutBlock>`, depth),
+  ].join("\n");
+}
+
+function buildSelectedScopeJsx(block: LayoutBlock, slotIdx: number, currentCss: string): string {
+  console.log(`Debug flow: buildSelectedScopeJsx fired with`, { blockId: block.id, slotIdx, currentCssLength: currentCss.length });
+  if (slotIdx < 0) {
+    return [
+      "import { LayoutBlock, Column } from '@/builder-ai-context'",
+      "",
+      "const SelectedBlockContext = () => (",
+      serializeBlockToJsx(block, 1),
+      ");",
+      "",
+      "export default SelectedBlockContext;",
+    ].join("\n");
+  }
+
+  const selectedSlot = block.slots[slotIdx] ?? null;
+  const columnStyle = block.columnStyles?.[slotIdx] ?? currentCss;
+  const widgetImport = selectedSlot?.widget
+    ? `import { ${toPascalCase(selectedSlot.widget.widgetId)}Widget } from '@/presentation/widgets'`
+    : null;
+  const children = selectedSlot ? serializeSlotToJsx(selectedSlot, slotIdx, 1) : indentLines("{/* missing slot */}", 1);
+  return [
+    "import { SelectedColumn, Column, LayoutBlock } from '@/builder-ai-context'",
+    ...(widgetImport ? [widgetImport] : []),
+    "",
+    "const SelectedColumnContext = () => (",
+    indentLines(
+      `<SelectedColumn blockId=${JSON.stringify(block.id)} blockType=${JSON.stringify(block.type)} slotIndex={${slotIdx}} currentCss=${JSON.stringify(columnStyle)}>` ,
+      1
+    ),
+    children,
+    indentLines(`</SelectedColumn>`, 1),
+    ");",
+    "",
+    "export default SelectedColumnContext;",
+  ].join("\n");
+}
+
 function mapWidgetContext(
   widget: PlacedWidget,
   slotIdx: number,
@@ -78,49 +225,48 @@ function collectSiblingWidgetContexts(
   return contexts;
 }
 
-function buildPromptContextText(snapshot: BuilderPromptContextSnapshot): string {
+function buildPromptContextText(snapshot: BuilderPromptContextSnapshot, block: LayoutBlock): string {
   console.log(`Debug flow: buildPromptContextText fired with`, {
     blockId: snapshot.blockId,
     slotIdx: snapshot.slotIdx,
     hasTargetWidget: !!snapshot.targetWidget,
     siblingCount: snapshot.siblingWidgets.length,
     nestedCount: snapshot.nestedWidgets.length,
+    blockSlotCount: block.slots.length,
   });
-
-  const payload = {
-    target: {
-      blockId: snapshot.blockId,
-      blockType: snapshot.blockType,
-      slotIdx: snapshot.slotIdx,
-      scope: snapshot.isBlockLevel ? "block-wrapper" : "column-slot",
-      currentCss: snapshot.currentCss || "(none)",
-    },
-    targetWidget: snapshot.targetWidget ?? null,
-    siblingWidgetsInSameBlock: snapshot.siblingWidgets,
-    nestedWidgetsInsideTargetColumn: snapshot.nestedWidgets,
-    blockStyles: snapshot.blockStyles ?? "",
-    columnStyles: snapshot.columnStyles ?? [],
-    guidance: {
-      widgetContractMandatory: "All AI answers must follow the selected widget contract. Do not guess missing widget internals.",
-      iconRule: "When user asks to change icon, use ONLY a valid Lucide icon name allowed by the widget contract.",
-      iconPolicy: "If requested icon is not valid in Lucide, keep the existing icon and suggest valid alternatives from the contract.",
-      availableLucideIcons: snapshot.availableLucideIcons,
-      commandRouting: {
-        styles: "Use /styles for container CSS only (layout/background/spacing).",
-        data: "Use /data to update existing widgetData fields (labels, values, colors, icon).",
-        config: "Use /config for structural/features configuration (table features/options/columns/settings).",
-      },
-    },
-  };
+  const jsxContext = buildSelectedScopeJsx(block, snapshot.slotIdx, snapshot.currentCss);
+  const siblingSummary = snapshot.siblingWidgets.length > 0
+    ? snapshot.siblingWidgets.map((widget) => `- slot ${widget.slotIdx}: ${widget.widgetId} (${widget.title})`).join("\n")
+    : "- none";
+  const nestedSummary = snapshot.nestedWidgets.length > 0
+    ? snapshot.nestedWidgets.map((widget) => `- slot ${widget.slotIdx}: ${widget.widgetId} (${widget.title})`).join("\n")
+    : "- none";
 
   const promptContext = [
     "BUILDER_PROMPT_CONTEXT_START",
-    JSON.stringify(payload, null, 2),
+    "TARGET_SCOPE",
+    `- blockId: ${snapshot.blockId}`,
+    `- blockType: ${snapshot.blockType}`,
+    `- slotIdx: ${snapshot.slotIdx}`,
+    `- scope: ${snapshot.isBlockLevel ? "block-wrapper" : "column-slot"}`,
+    `- currentCss: ${snapshot.currentCss || "(none)"}`,
+    "",
+    "SELECTED_SCOPE_JSX_START",
+    jsxContext,
+    "SELECTED_SCOPE_JSX_END",
+    "",
+    "SIBLING_WIDGET_SUMMARY",
+    siblingSummary,
+    "",
+    "NESTED_WIDGET_SUMMARY",
+    nestedSummary,
+    "",
     snapshot.targetWidget
       ? buildWidgetSpecPrompt(getWidgetSpec(snapshot.targetWidget.widgetId, snapshot.targetWidget.category, snapshot.targetWidget.widgetData))
       : "WIDGET_SPEC_CONTRACT_START\nNo selected widget. Use /styles only.\nWIDGET_SPEC_CONTRACT_END",
     "BUILDER_PROMPT_CONTEXT_RULES:",
-    "- Use this context and widget contract as the source of truth for target scope and widget data.",
+    "- Use the JSX tree as the primary source of truth for structure and scope.",
+    "- Use the widget contract as the secondary source of truth for allowed widget data/config fields.",
     "- Modify only the target block/column/widget unless the user explicitly asks broader changes.",
     "- For internal widget changes (value, labels, icon, progress colors), use /data only when the field exists in the widget contract.",
     "- For table/options/features settings, use /config only when the field exists in the widget contract.",
@@ -174,7 +320,7 @@ export function useBuilderPromptContext(blocks: LayoutBlock[]) {
       availableLucideIcons: targetWidget?.iconCandidates ?? [],
     };
 
-    const promptContext = buildPromptContextText(snapshot);
+    const promptContext = buildPromptContextText(snapshot, block);
     console.log(`Debug flow: buildPromptContext result`, {
       blockId,
       slotIdx,

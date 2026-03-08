@@ -21,12 +21,127 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs";
+import { formatAiChatMessage } from "./formatAiChatMessage";
 import type {
   BlockStyleEditorState,
   CodeEditorTab,
   GroqChatMessage,
   GroqStyleContext,
 } from "@/domain/builder/types";
+
+const ICON_SUGGESTIONS = [
+  "Award",
+  "BarChart3",
+  "Bell",
+  "Check",
+  "Clock",
+  "Download",
+  "FileText",
+  "LayoutDashboard",
+  "Plus",
+  "Save",
+  "Search",
+  "Settings",
+  "Sparkles",
+  "Star",
+  "TrendingUp",
+  "Trophy",
+  "Upload",
+  "User",
+  "Users",
+  "X",
+] as const;
+
+type IconFieldEntry = {
+  path: string;
+  value: string;
+};
+
+function parseEditorJson(value: string): Record<string, unknown> | null {
+  console.log(`Debug flow: parseEditorJson fired with`, { valueLength: value.length });
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Keep icon editing disabled until the JSON becomes valid again.
+  }
+  return null;
+}
+
+function collectIconFieldEntries(value: unknown, basePath = ""): IconFieldEntry[] {
+  console.log(`Debug flow: collectIconFieldEntries fired with`, { basePath, valueType: Array.isArray(value) ? "array" : typeof value });
+  if (value === null || value === undefined) {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, index) =>
+      collectIconFieldEntries(entry, `${basePath}[${index}]`)
+    );
+  }
+  if (typeof value !== "object") {
+    return [];
+  }
+
+  const entries: IconFieldEntry[] = [];
+  Object.entries(value as Record<string, unknown>).forEach(([key, child]) => {
+    const path = basePath ? `${basePath}.${key}` : key;
+    if (/icon/i.test(key) && typeof child === "string") {
+      entries.push({ path, value: child });
+    }
+    entries.push(...collectIconFieldEntries(child, path));
+  });
+  return entries;
+}
+
+function updateJsonAtIconPath(
+  source: Record<string, unknown>,
+  path: string,
+  nextValue: string
+): Record<string, unknown> {
+  console.log(`Debug flow: updateJsonAtIconPath fired with`, { path, nextValue });
+  const clone = JSON.parse(JSON.stringify(source)) as Record<string, unknown>;
+  const segments = path.match(/[^.[\]]+|\[\d+\]/g) ?? [];
+  let current: unknown = clone;
+
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index]!;
+    const isIndex = /^\[\d+\]$/.test(segment);
+    const isLast = index === segments.length - 1;
+
+    if (isIndex) {
+      const arrayIndex = Number(segment.slice(1, -1));
+      if (!Array.isArray(current)) {
+        return clone;
+      }
+      if (isLast) {
+        current[arrayIndex] = nextValue;
+        return clone;
+      }
+      current = current[arrayIndex];
+      continue;
+    }
+
+    if (!current || typeof current !== "object") {
+      return clone;
+    }
+
+    const record = current as Record<string, unknown>;
+    if (isLast) {
+      record[segment] = nextValue;
+      return clone;
+    }
+
+    current = record[segment];
+  }
+
+  return clone;
+}
+
+function sanitizeDataTestId(path: string): string {
+  return path.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
 
 export function BuilderCodeEditorDialog({
   cssEditorState,
@@ -66,6 +181,8 @@ export function BuilderCodeEditorDialog({
     codeEditorTab,
     hasDataJsonError: !!dataJsonError,
   });
+  const parsedDataDraft = parseEditorJson(dataEditorDraft);
+  const iconFields = parsedDataDraft ? collectIconFieldEntries(parsedDataDraft) : [];
   return (
     <Dialog
       open={!!cssEditorState}
@@ -121,6 +238,15 @@ export function BuilderCodeEditorDialog({
                 >
                   Data
                 </TabsTrigger>
+                {iconFields.length > 0 && (
+                  <TabsTrigger
+                    value="icons"
+                    className="rounded-t-xl px-3 py-1.5 text-xs text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-800"
+                    data-test-id="builder-tab-icons"
+                  >
+                    Icons
+                  </TabsTrigger>
+                )}
                 <TabsTrigger
                   value="function"
                   className="rounded-t-xl px-3 py-1.5 text-xs text-slate-500 data-[state=active]:bg-white data-[state=active]:text-slate-800"
@@ -179,7 +305,18 @@ export function BuilderCodeEditorDialog({
               </div>
             )}
             <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
-              <span className="text-[10px] font-mono text-slate-400">JSON • Widget data object</span>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-mono text-slate-400">JSON • Widget data object</span>
+                <a
+                  href="https://lucide.dev/icons/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[10px] font-mono text-sky-600 underline-offset-2 hover:underline"
+                  data-test-id="builder-data-editor-lucide-link"
+                >
+                  Icon names: browse Lucide icons
+                </a>
+              </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="ghost" onClick={closeCssEditor} className="text-slate-500 hover:text-slate-800" data-test-id="builder-data-editor-cancel-btn">Cancel</Button>
                 <Button
@@ -196,6 +333,81 @@ export function BuilderCodeEditorDialog({
                   data-test-id="builder-data-editor-save-btn"
                 >
                   <Save className="w-3.5 h-3.5 mr-1" /> Save data
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="icons" className="mt-0" data-test-id="builder-tab-content-icons">
+            <div className="max-h-56 space-y-3 overflow-y-auto bg-white px-4 py-4">
+              {iconFields.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center">
+                  <p className="text-sm font-medium text-slate-700">No editable icon fields found</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    This widget does not expose icon fields in its current data payload.
+                  </p>
+                </div>
+              ) : (
+                iconFields.map((iconField) => (
+                  <div
+                    key={iconField.path}
+                    className="space-y-1 rounded-2xl border border-slate-200 bg-slate-50 p-3"
+                  >
+                    <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-slate-400">
+                      {iconField.path}
+                    </p>
+                    <Input
+                      value={iconField.value}
+                      list="builder-icon-suggestions"
+                      onChange={(e) => {
+                        if (!parsedDataDraft) {
+                          return;
+                        }
+                        const nextData = updateJsonAtIconPath(parsedDataDraft, iconField.path, e.target.value);
+                        setDataEditorDraft(JSON.stringify(nextData, null, 2));
+                        setDataJsonError(null);
+                      }}
+                      placeholder="Lucide icon name"
+                      data-test-id={`builder-icon-input-${sanitizeDataTestId(iconField.path)}`}
+                    />
+                  </div>
+                ))
+              )}
+              <datalist id="builder-icon-suggestions">
+                {ICON_SUGGESTIONS.map((iconName) => (
+                  <option key={iconName} value={iconName} />
+                ))}
+              </datalist>
+            </div>
+            <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-mono text-slate-400">ICONS • Edit each icon path in isolation</span>
+                <a
+                  href="https://lucide.dev/icons/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[10px] font-mono text-sky-600 underline-offset-2 hover:underline"
+                  data-test-id="builder-icons-editor-lucide-link"
+                >
+                  Browse Lucide icons
+                </a>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="ghost" onClick={closeCssEditor} className="text-slate-500 hover:text-slate-800" data-test-id="builder-icons-editor-cancel-btn">Cancel</Button>
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    const error = await saveWidgetDataFromEditor(dataEditorDraft);
+                    if (error) {
+                      setDataJsonError(error);
+                    } else {
+                      closeCssEditor();
+                    }
+                  }}
+                  className="bg-sky-600 hover:bg-sky-700 text-white"
+                  data-test-id="builder-icons-editor-save-btn"
+                >
+                  <Save className="w-3.5 h-3.5 mr-1" /> Save icons
                 </Button>
               </div>
             </div>
@@ -333,6 +545,10 @@ export function BuilderAiChatPanel({
             msg.role === "assistant"
             && /(^|;)\s*[a-z-]+\s*:\s*[^;]+;?/i.test(msg.content)
             && !msg.content.toLowerCase().includes("suggested command mode");
+          const formattedAssistantHtml =
+            msg.role === "assistant" && !isCssLikeAssistantResponse
+              ? formatAiChatMessage(msg.content)
+              : "";
           return (
             <div
               key={i}
@@ -345,7 +561,14 @@ export function BuilderAiChatPanel({
               }`}
               data-test-id={`builder-ai-chat-msg-${i}`}
             >
-              {msg.content}
+              {msg.role === "assistant" && !isCssLikeAssistantResponse ? (
+                <div
+                  className="builder-ai-formatted-response space-y-2 [&_code]:rounded-md [&_code]:bg-slate-200 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[11px] [&_p]:leading-relaxed [&_section]:space-y-2 [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5"
+                  dangerouslySetInnerHTML={{ __html: formattedAssistantHtml }}
+                />
+              ) : (
+                msg.content
+              )}
             </div>
           );
         })}

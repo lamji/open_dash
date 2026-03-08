@@ -244,6 +244,7 @@ Rules:
 6.4 For wrapper/container layout/background/spacing/alignment, route to /styles and use standard CSS declarations only.
 6.5 Never output pseudo keys like "--progress-bar-color" or unsupported custom style commands.
 6.6 If the request falls outside the selected widget contract, say that clearly instead of guessing.
+6.7 If the user gives a direct imperative layout/style request (for example "move button to the right", "center this", "add padding"), prefer "execute_styles" instead of "answer".
 7. Decide responseType:
    - "execute_styles": direct command to change CSS/layout/positioning
    - "execute_data": direct command to change widget content/data fields
@@ -269,6 +270,26 @@ ${promptContext ? `LIVE BUILDER CONTEXT SNAPSHOT\n${promptContext}\n` : ""}
 
 USER QUESTION
 ${message}`;
+    console.log(`Debug flow: POST /api/builder/ai-assistant final prompt`, {
+      blockId,
+      slotIdx,
+      scopeLabel,
+      currentCssLength: currentCss.length,
+      messageLength: message.length,
+      message,
+      promptContextLength: promptContext?.length ?? 0,
+      promptContextPreview: promptContext?.slice(0, 1000) ?? null,
+      systemPromptLength: systemPrompt.length,
+      systemPrompt,
+      userContextLength: userContext.length,
+      userContext,
+      historyCount: history.length,
+      historyPreview: history.map((entry, index) => ({
+        index,
+        role: entry.role,
+        contentPreview: entry.content.slice(0, 240),
+      })),
+    });
 
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",

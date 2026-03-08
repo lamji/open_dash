@@ -81,6 +81,19 @@ export async function generateAiStyle(
   promptContext?: string
 ): Promise<GenerateAiStyleResponse> {
   console.log(`Debug flow: generateAiStyle fired with`, { blockId, slotIdx, blockType, message, widget, mode, hasPromptContext: !!promptContext });
+  console.log(`Debug flow: generateAiStyle payload detail`, {
+    blockId,
+    slotIdx,
+    currentCssLength: currentCss.length,
+    messageLength: message.length,
+    historyCount: history.length,
+    lastHistoryRole: history[history.length - 1]?.role ?? null,
+    lastHistoryPreview: history[history.length - 1]?.content?.slice(0, 240) ?? null,
+    widgetId: widget?.widgetId ?? null,
+    widgetCategory: widget?.category ?? null,
+    promptContextLength: promptContext?.length ?? 0,
+    promptContextPreview: promptContext?.slice(0, 600) ?? null,
+  });
   try {
     const res = await fetch("/api/builder/ai-style", {
       method: "POST",
@@ -150,6 +163,19 @@ export async function generateAiAssistant(
     message,
     hasWidget: !!widget,
     hasPromptContext: !!promptContext,
+  });
+  console.log(`Debug flow: generateAiAssistant payload detail`, {
+    blockId,
+    slotIdx,
+    currentCssLength: currentCss.length,
+    messageLength: message.length,
+    historyCount: history.length,
+    lastHistoryRole: history[history.length - 1]?.role ?? null,
+    lastHistoryPreview: history[history.length - 1]?.content?.slice(0, 240) ?? null,
+    widgetId: widget?.widgetId ?? null,
+    widgetCategory: widget?.category ?? null,
+    promptContextLength: promptContext?.length ?? 0,
+    promptContextPreview: promptContext?.slice(0, 600) ?? null,
   });
   try {
     const res = await fetch("/api/builder/ai-assistant", {

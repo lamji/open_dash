@@ -7,3 +7,4 @@ export interface CacheChangeEvent {
 }
 
 export const BUILDER_CACHE_INVALIDATE_EVENT = "builder-cache-invalidate";
+export const PROJECTS_CACHE_INVALIDATE_EVENT = "projects-cache-invalidate";

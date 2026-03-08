@@ -54,6 +54,9 @@ export function cssStringToStyle(css: string): CSSProperties {
     const camel = prop.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
     style[camel] = val;
   });
+  if (style.background !== undefined && style.backgroundColor !== undefined) {
+    delete style.backgroundColor;
+  }
   console.log(`Debug flow: cssStringToStyle result`, { keys: Object.keys(style) });
   return style as CSSProperties;
 }
@@ -196,6 +199,39 @@ export function findBlock(blocks: LayoutBlock[], blockId: string): LayoutBlock |
   return null;
 }
 
+function parseGridRatioTracks(block: LayoutBlock): number[] {
+  console.log(`Debug flow: builder parseGridRatioTracks fired with`, { blockId: block.id, gridRatio: block.gridRatio });
+  if (!block.gridRatio) return [];
+  const parts = block.gridRatio
+    .split(" ")
+    .map((part) => Number.parseFloat(part.trim().replace("fr", "")))
+    .filter((part) => Number.isFinite(part) && part > 0);
+  if (parts.length <= block.slots.length) {
+    return parts;
+  }
+  return [...parts.slice(0, Math.max(block.slots.length - 1, 0)), parts[parts.length - 1]];
+}
+
+function getGridTrackScale(trackValues: number[]): number {
+  console.log(`Debug flow: builder getGridTrackScale fired with`, { trackCount: trackValues.length });
+  const maxDecimals = trackValues.reduce((highestValue, trackValue) => {
+    const [, decimals = ""] = trackValue.toString().split(".");
+    return Math.max(highestValue, decimals.length);
+  }, 0);
+  return 10 ** maxDecimals;
+}
+
+function getGridCanvasColumns(block: LayoutBlock): number | null {
+  console.log(`Debug flow: builder getGridCanvasColumns fired with`, { blockId: block.id, slotCount: block.slots.length });
+  const tracks = parseGridRatioTracks(block);
+  if (!block.gridRatio || block.layoutDisplay !== "grid" || tracks.length !== block.slots.length) {
+    return null;
+  }
+  const scale = getGridTrackScale(tracks);
+  const totalTrackColumns = tracks.reduce((sum, trackValue) => sum + Math.round(trackValue * scale), 0);
+  return Math.max(12 * scale, totalTrackColumns);
+}
+
 export function getBlockContainerStyle(block: LayoutBlock): CSSProperties {
   console.log(`Debug flow: getBlockContainerStyle fired with`, { blockId: block.id, display: block.layoutDisplay, gap: block.gap });
   const gap = block.gap ? `${block.gap}` : undefined;
@@ -208,11 +244,19 @@ export function getBlockContainerStyle(block: LayoutBlock): CSSProperties {
       alignItems: block.alignItems,
     };
   }
+  const gridCanvasColumns = getGridCanvasColumns(block);
   return {
     gap,
-    justifyItems: block.justifyContent === "start" ? "start" : block.justifyContent === "end" ? "end" : undefined,
+    justifyItems:
+      block.justifyContent === "start"
+        ? "start"
+        : block.justifyContent === "end"
+          ? "end"
+          : block.justifyContent === "center"
+            ? "center"
+            : undefined,
     alignItems: block.alignItems,
-    ...(block.gridRatio ? { gridTemplateColumns: "repeat(12, minmax(0, 1fr))" } : {}),
+    ...(gridCanvasColumns ? { gridTemplateColumns: `repeat(${gridCanvasColumns}, minmax(0, 1fr))` } : {}),
   };
 }
 

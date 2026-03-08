@@ -106,9 +106,9 @@ function GridPlaygroundPresentation(props: GridPlaygroundPresentationProps) {
               <li>
                 Enter numbers separated by &quot;/&quot; (e.g., <span className="font-mono font-semibold text-slate-700">{props.exampleInput}</span>)
               </li>
-              <li>Each number represents column width proportionally</li>
+              <li>Each number represents a column span value, and decimals are allowed</li>
               <li>Choose grid or flex, then fine-tune justify, align, and gap</li>
-              <li>Max total value: 12</li>
+              <li>Grid ratios use a 12-unit minimum canvas, so unused space can remain empty</li>
             </ul>
           </div>
 

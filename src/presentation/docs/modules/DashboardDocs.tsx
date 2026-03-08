@@ -1,5 +1,7 @@
 "use client";
 
+import { DASHBOARD_API_SECURITY_TUTORIAL } from "@/presentation/docs/useDocs";
+
 export function DashboardDocs() {
   if (process.env.NODE_ENV !== "production") {
     console.debug("Debug flow: DashboardDocs fired");
@@ -146,18 +148,32 @@ export function DashboardDocs() {
 
       <section id="dashboard-api">
         <h2 className="text-2xl font-bold tracking-tight" data-test-id="docs-dash-api">
-          Collaboration Tips
+          API Security In Project Panel
         </h2>
         <p className="mt-3 text-sm leading-relaxed text-zinc-400">
-          A few habits make dashboard work much easier for teams:
+          {DASHBOARD_API_SECURITY_TUTORIAL.intro}
         </p>
+        <div className="mt-6 rounded-xl border border-white/[0.06] bg-zinc-900/50 p-4">
+          <h4 className="text-sm font-semibold text-zinc-200">How To Set It Up</h4>
+          <div className="mt-3 space-y-3 text-sm text-zinc-400">
+            {DASHBOARD_API_SECURITY_TUTORIAL.steps.map((step) => (
+              <div key={step.title}>
+                <p className="font-medium text-zinc-200">{step.title}</p>
+                <p className="mt-1 leading-relaxed">{step.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
         <div className="mt-4 rounded-xl border border-white/[0.06] bg-zinc-900/50 p-4">
-          <ul className="space-y-2 text-sm text-zinc-400">
-            <li>Use project names that describe the audience or business question.</li>
-            <li>Write descriptions that explain what the dashboard should answer.</li>
-            <li>Publish only after preview looks clean enough for outside eyes.</li>
-            <li>Use comments and tasks to capture decisions instead of leaving them in chat.</li>
-          </ul>
+          <h4 className="text-sm font-semibold text-zinc-200">Why This Is Safer</h4>
+          <div className="mt-3 space-y-3 text-sm text-zinc-400">
+            {DASHBOARD_API_SECURITY_TUTORIAL.securityNotes.map((note) => (
+              <div key={note.title}>
+                <p className="font-medium text-zinc-200">{note.title}</p>
+                <p className="mt-1 leading-relaxed">{note.description}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
     </div>

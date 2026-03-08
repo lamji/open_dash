@@ -25,7 +25,7 @@ export async function createNavItem(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ label }),
     });
-    const data = (await res.json()) as CreateNavItemResponse;
+    const data = await parseBuilderNavResponse<CreateNavItemResponse>(res, "Failed to create nav item");
     console.log(`Debug flow: createNavItem response`, { ok: data.ok, id: data.item?.id, errorCode: data.errorCode });
     
     // Check for FK constraint violation (security breach attempt)
@@ -65,7 +65,9 @@ export async function createNavItem(
 export async function getNavItems(projectId: string): Promise<GetNavItemsResponse> {
   console.log(`Debug flow: getNavItems fired with`, { projectId });
   try {
-    const res = await fetch(`/api/sidebar?projectId=${projectId}`);
+    const res = await fetch(`/api/sidebar?projectId=${projectId}&forceRefresh=1`, {
+      cache: "no-store",
+    });
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const items = (await res.json()) as NavItem[];
     console.log(`Debug flow: getNavItems loaded`, { count: items.length });
@@ -81,6 +83,43 @@ interface DeleteNavItemResponse {
   error?: string;
 }
 
+async function parseBuilderNavResponse<T extends { ok: boolean; error?: string }>(
+  res: Response,
+  fallbackError: string
+): Promise<T> {
+  console.log(`Debug flow: parseBuilderNavResponse fired with`, {
+    status: res.status,
+    ok: res.ok,
+    contentType: res.headers.get("content-type"),
+  });
+  const rawBody = await res.text();
+  if (!rawBody.trim()) {
+    console.warn(`Debug flow: parseBuilderNavResponse empty body`, { status: res.status });
+    return {
+      ok: false,
+      error: `${fallbackError} (HTTP ${res.status}: empty response body)`,
+    } as T;
+  }
+
+  try {
+    const parsed = JSON.parse(rawBody) as T;
+    if (!res.ok && (!parsed.error || parsed.error.trim().length === 0)) {
+      return {
+        ...parsed,
+        ok: false,
+        error: `${fallbackError} (HTTP ${res.status})`,
+      };
+    }
+    return parsed;
+  } catch (err) {
+    console.error(`Debug flow: parseBuilderNavResponse JSON parse error`, err);
+    return {
+      ok: false,
+      error: `${fallbackError} (HTTP ${res.status}: invalid JSON response)`,
+    } as T;
+  }
+}
+
 export async function deleteNavItem(
   itemId: string,
   projectId: string
@@ -90,7 +129,7 @@ export async function deleteNavItem(
     const res = await fetch(`/api/sidebar/${itemId}?projectId=${projectId}`, {
       method: "DELETE",
     });
-    const data = (await res.json()) as DeleteNavItemResponse;
+    const data = await parseBuilderNavResponse<DeleteNavItemResponse>(res, "Failed to delete nav item");
     console.log(`Debug flow: deleteNavItem response`, { ok: data.ok });
     
     if (data.ok) {

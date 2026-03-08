@@ -2,8 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { validateSession, SESSION_COOKIE_NAME } from "@/lib/auth";
+import { emitProjectsCacheInvalidation } from "@/lib/socket-server";
+import { encryptProjectConfigValue } from "@/lib/project-config-crypto";
+import type { ProjectApiIntegration, ProjectConfigPayload } from "@/domain/dashboard/types";
+
+const BUILDER_LAYOUT_CONFIG_KEY = "builder_layout_state";
+const PROJECT_ADVANCED_CONFIG_KEY = "project_advanced_config";
+
+interface BuilderLayoutState {
+  draftLayoutId?: string | null;
+  publishedLayoutId?: string | null;
+  lastPublishedAt?: string | null;
+}
+
+interface StoredProjectAdvancedConfig {
+  loginRequired: boolean;
+  encryptedUserSecretKey?: string;
+  customServiceUrlEncrypted?: string;
+  loginEndpointEncrypted?: string;
+  apiIntegrations: ProjectApiIntegration[];
+}
 
 async function getAuthenticatedUser() {
+  console.log("Debug flow: getAuthenticatedUser fired");
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!token) return null;
@@ -12,6 +33,7 @@ async function getAuthenticatedUser() {
 }
 
 function slugify(text: string): string {
+  console.log("Debug flow: slugify fired", { inputLength: text.length });
   return text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -19,7 +41,115 @@ function slugify(text: string): string {
     .substring(0, 50);
 }
 
+function parseBuilderLayoutState(rawValue: string): BuilderLayoutState {
+  console.log("Debug flow: parseBuilderLayoutState fired", { rawValueLength: rawValue.length });
+  try {
+    return JSON.parse(rawValue) as BuilderLayoutState;
+  } catch (err) {
+    console.error("Debug flow: parseBuilderLayoutState parse error", err);
+    return {};
+  }
+}
+
+function normalizeIntegrations(input: unknown): ProjectApiIntegration[] {
+  console.log("Debug flow: normalizeIntegrations fired");
+  if (!Array.isArray(input)) {
+    return [];
+  }
+  return input
+    .filter((item): item is ProjectApiIntegration => {
+      if (!item || typeof item !== "object") {
+        return false;
+      }
+      const candidate = item as Record<string, unknown>;
+      return (
+        typeof candidate.id === "string" &&
+        typeof candidate.navigationId === "string" &&
+        typeof candidate.navigationLabel === "string" &&
+        typeof candidate.method === "string" &&
+        (typeof candidate.url === "string" || typeof candidate.encryptedUrl === "string")
+      );
+    })
+    .map((item) => ({
+      id: item.id,
+      navigationId: item.navigationId,
+      navigationLabel: item.navigationLabel,
+      method: item.method,
+      url: typeof item.url === "string" ? item.url.trim() : undefined,
+      encryptedUrl: typeof item.encryptedUrl === "string" ? item.encryptedUrl : undefined,
+    }));
+}
+
+function parseAdvancedProjectConfig(rawValue: string): StoredProjectAdvancedConfig {
+  console.log("Debug flow: parseAdvancedProjectConfig fired", { rawValueLength: rawValue.length });
+  try {
+    const parsed = JSON.parse(rawValue) as {
+      loginRequired?: unknown;
+      encryptedUserSecretKey?: unknown;
+      customServiceUrlEncrypted?: unknown;
+      loginEndpointEncrypted?: unknown;
+      apiIntegrations?: unknown;
+    };
+    return {
+      loginRequired: Boolean(parsed.loginRequired),
+      encryptedUserSecretKey:
+        typeof parsed.encryptedUserSecretKey === "string" && parsed.encryptedUserSecretKey.length > 0
+          ? parsed.encryptedUserSecretKey
+          : undefined,
+      customServiceUrlEncrypted:
+        typeof parsed.customServiceUrlEncrypted === "string" && parsed.customServiceUrlEncrypted.length > 0
+          ? parsed.customServiceUrlEncrypted
+          : undefined,
+      loginEndpointEncrypted:
+        typeof parsed.loginEndpointEncrypted === "string" && parsed.loginEndpointEncrypted.length > 0
+          ? parsed.loginEndpointEncrypted
+          : undefined,
+      apiIntegrations: normalizeIntegrations(parsed.apiIntegrations),
+    };
+  } catch (err) {
+    console.error("Debug flow: parseAdvancedProjectConfig parse error", err);
+    return {
+      loginRequired: false,
+      apiIntegrations: [],
+    };
+  }
+}
+
+function toProjectResponse(
+  project: {
+    id: string;
+    name: string;
+    slug: string;
+    description: string;
+    published: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  },
+  layoutConfig: BuilderLayoutState | undefined,
+  advancedConfig: StoredProjectAdvancedConfig | undefined
+) {
+  console.log("Debug flow: toProjectResponse fired", { projectId: project.id });
+  return {
+    id: project.id,
+    name: project.name,
+    slug: project.slug,
+    description: project.description,
+    published: project.published,
+    liveLayoutId: layoutConfig?.publishedLayoutId ?? null,
+    loginRequired: Boolean(advancedConfig?.loginRequired),
+    hasUserSecretKey: Boolean(advancedConfig?.encryptedUserSecretKey),
+    hasCustomServiceUrl: Boolean(advancedConfig?.customServiceUrlEncrypted),
+    hasLoginEndpoint: Boolean(advancedConfig?.loginEndpointEncrypted),
+    encryptedCustomServiceUrl: advancedConfig?.customServiceUrlEncrypted ?? null,
+    encryptedLoginEndpoint: advancedConfig?.loginEndpointEncrypted ?? null,
+    apiIntegrations: advancedConfig?.apiIntegrations ?? [],
+    createdAt: project.createdAt.toISOString(),
+    updatedAt: project.updatedAt.toISOString(),
+  };
+}
+
 export async function GET() {
+  console.log("Debug flow: GET /api/projects fired");
   const user = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
@@ -28,41 +158,50 @@ export async function GET() {
   const projects = await prisma.project.findMany({
     where: { userId: user.id },
     orderBy: { updatedAt: "desc" },
-  });
-  const builderLayoutConfigs = await prisma.appConfig.findMany({
-    where: {
-      projectId: { in: projects.map((project) => project.id) },
-      key: "builder_layout_state",
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      description: true,
+      published: true,
+      createdAt: true,
+      updatedAt: true,
     },
   });
-  const layoutConfigMap = new Map<string, { publishedLayoutId?: string | null }>();
-  builderLayoutConfigs.forEach((config) => {
-    try {
-      layoutConfigMap.set(
-        config.projectId,
-        JSON.parse(config.value) as { publishedLayoutId?: string | null }
-      );
-    } catch (err) {
-      console.error("Debug flow: GET /api/projects config parse error", err);
+
+  const projectIds = projects.map((project) => project.id);
+  const projectConfigs =
+    projectIds.length === 0
+      ? []
+      : await prisma.appConfig.findMany({
+          where: {
+            projectId: { in: projectIds },
+            key: { in: [BUILDER_LAYOUT_CONFIG_KEY, PROJECT_ADVANCED_CONFIG_KEY] },
+          },
+        });
+
+  const layoutConfigMap = new Map<string, BuilderLayoutState>();
+  const advancedConfigMap = new Map<string, StoredProjectAdvancedConfig>();
+
+  projectConfigs.forEach((config) => {
+    if (config.key === BUILDER_LAYOUT_CONFIG_KEY) {
+      layoutConfigMap.set(config.projectId, parseBuilderLayoutState(config.value));
+    }
+    if (config.key === PROJECT_ADVANCED_CONFIG_KEY) {
+      advancedConfigMap.set(config.projectId, parseAdvancedProjectConfig(config.value));
     }
   });
 
   return NextResponse.json({
     ok: true,
-    projects: projects.map((p) => ({
-      id: p.id,
-      name: p.name,
-      slug: p.slug,
-      description: p.description,
-      published: p.published,
-      liveLayoutId: layoutConfigMap.get(p.id)?.publishedLayoutId ?? null,
-      createdAt: p.createdAt.toISOString(),
-      updatedAt: p.updatedAt.toISOString(),
-    })),
+    projects: projects.map((project) =>
+      toProjectResponse(project, layoutConfigMap.get(project.id), advancedConfigMap.get(project.id))
+    ),
   });
 }
 
 export async function POST(request: NextRequest) {
+  console.log("Debug flow: POST /api/projects fired");
   const user = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
@@ -87,31 +226,33 @@ export async function POST(request: NextRequest) {
       description: description?.trim() ?? "",
     },
   });
+  emitProjectsCacheInvalidation();
 
   return NextResponse.json({
     ok: true,
-    project: {
-      id: project.id,
-      name: project.name,
-      slug: project.slug,
-      description: project.description,
-      published: project.published,
-      createdAt: project.createdAt.toISOString(),
-      updatedAt: project.updatedAt.toISOString(),
-    },
+    project: toProjectResponse(project, undefined, {
+      loginRequired: false,
+      apiIntegrations: [],
+    }),
   });
 }
 
 export async function PUT(request: NextRequest) {
-  console.log(`Debug flow: PUT /api/projects fired`);
+  console.log("Debug flow: PUT /api/projects fired");
   const user = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await request.json();
-  const { id, name, description, published } = body;
-  console.log(`Debug flow: PUT /api/projects params`, { id, published });
+  const { id, name, description, published, config } = body as {
+    id?: string;
+    name?: string;
+    description?: string;
+    published?: boolean;
+    config?: ProjectConfigPayload;
+  };
+  console.log("Debug flow: PUT /api/projects params", { id, published, hasConfig: !!config });
 
   if (!id) {
     return NextResponse.json({ ok: false, error: "Project ID is required" }, { status: 400 });
@@ -128,34 +269,33 @@ export async function PUT(request: NextRequest) {
   const data: Record<string, unknown> = {};
   if (name !== undefined) data.name = name.trim();
   if (description !== undefined) data.description = description.trim();
+
   if (published !== undefined) {
     if (published === true) {
       const builderLayoutConfig = await prisma.appConfig.findUnique({
         where: {
           key_projectId: {
-            key: "builder_layout_state",
+            key: BUILDER_LAYOUT_CONFIG_KEY,
             projectId: id,
           },
         },
       });
       const parsedLayoutConfig = builderLayoutConfig
-        ? JSON.parse(builderLayoutConfig.value) as {
-            draftLayoutId?: string | null;
-            publishedLayoutId?: string | null;
-            lastPublishedAt?: string | null;
-          }
+        ? parseBuilderLayoutState(builderLayoutConfig.value)
         : null;
       const draftLayoutId = parsedLayoutConfig?.draftLayoutId ?? null;
+
       if (!draftLayoutId) {
         return NextResponse.json(
           { ok: false, error: "Cannot publish a project without a saved builder draft." },
           { status: 400 }
         );
       }
+
       await prisma.appConfig.upsert({
         where: {
           key_projectId: {
-            key: "builder_layout_state",
+            key: BUILDER_LAYOUT_CONFIG_KEY,
             projectId: id,
           },
         },
@@ -167,7 +307,7 @@ export async function PUT(request: NextRequest) {
           }),
         },
         create: {
-          key: "builder_layout_state",
+          key: BUILDER_LAYOUT_CONFIG_KEY,
           projectId: id,
           value: JSON.stringify({
             draftLayoutId,
@@ -180,43 +320,111 @@ export async function PUT(request: NextRequest) {
     data.published = published;
   }
 
+  if (config) {
+    const existingAdvancedConfig = await prisma.appConfig.findUnique({
+      where: {
+        key_projectId: {
+          key: PROJECT_ADVANCED_CONFIG_KEY,
+          projectId: id,
+        },
+      },
+    });
+
+    const parsedExistingAdvancedConfig = existingAdvancedConfig
+      ? parseAdvancedProjectConfig(existingAdvancedConfig.value)
+      : { loginRequired: false, apiIntegrations: [] };
+
+    const nextEncryptedSecretKey = typeof config.secretKey === "string" && config.secretKey.trim().length > 0
+      ? encryptProjectConfigValue(config.secretKey.trim())
+      : parsedExistingAdvancedConfig.encryptedUserSecretKey;
+
+    const nextEncryptedUrl = config.clearCustomServiceUrl
+      ? undefined
+      : typeof config.customServiceUrlEncrypted === "string" && config.customServiceUrlEncrypted.trim().length > 0
+        ? config.customServiceUrlEncrypted.trim()
+        : parsedExistingAdvancedConfig.customServiceUrlEncrypted;
+    const nextEncryptedLoginEndpoint = config.clearLoginEndpoint
+      ? undefined
+      : typeof config.loginEndpointEncrypted === "string" && config.loginEndpointEncrypted.trim().length > 0
+        ? config.loginEndpointEncrypted.trim()
+        : parsedExistingAdvancedConfig.loginEndpointEncrypted;
+
+    const nextEncryptedIntegrations =
+      Array.isArray(config.apiIntegrationsEncrypted) && config.apiIntegrationsEncrypted.length > 0
+        ? normalizeIntegrations(config.apiIntegrationsEncrypted).map((integration) => ({
+            ...integration,
+            url: undefined,
+          }))
+        : parsedExistingAdvancedConfig.apiIntegrations;
+
+    await prisma.appConfig.upsert({
+      where: {
+        key_projectId: {
+          key: PROJECT_ADVANCED_CONFIG_KEY,
+          projectId: id,
+        },
+      },
+      update: {
+        value: JSON.stringify({
+          loginRequired: Boolean(config.loginRequired),
+          encryptedUserSecretKey: nextEncryptedSecretKey,
+          customServiceUrlEncrypted: nextEncryptedUrl,
+          loginEndpointEncrypted: nextEncryptedLoginEndpoint,
+          apiIntegrations: nextEncryptedIntegrations,
+        } satisfies StoredProjectAdvancedConfig),
+      },
+      create: {
+        key: PROJECT_ADVANCED_CONFIG_KEY,
+        projectId: id,
+        value: JSON.stringify({
+          loginRequired: Boolean(config.loginRequired),
+          encryptedUserSecretKey: nextEncryptedSecretKey,
+          customServiceUrlEncrypted: nextEncryptedUrl,
+          loginEndpointEncrypted: nextEncryptedLoginEndpoint,
+          apiIntegrations: nextEncryptedIntegrations,
+        } satisfies StoredProjectAdvancedConfig),
+      },
+    });
+  }
+
   const project = await prisma.project.update({
     where: { id },
     data,
   });
-  const builderLayoutConfig = await prisma.appConfig.findUnique({
-    where: {
-      key_projectId: {
-        key: "builder_layout_state",
-        projectId: id,
+
+  emitProjectsCacheInvalidation();
+
+  const [builderLayoutConfig, advancedConfig] = await Promise.all([
+    prisma.appConfig.findUnique({
+      where: {
+        key_projectId: {
+          key: BUILDER_LAYOUT_CONFIG_KEY,
+          projectId: id,
+        },
       },
-    },
-  });
-  let liveLayoutId: string | null = null;
-  if (builderLayoutConfig) {
-    try {
-      liveLayoutId = (JSON.parse(builderLayoutConfig.value) as { publishedLayoutId?: string | null }).publishedLayoutId ?? null;
-    } catch (err) {
-      console.error("Debug flow: PUT /api/projects config parse error", err);
-    }
-  }
+    }),
+    prisma.appConfig.findUnique({
+      where: {
+        key_projectId: {
+          key: PROJECT_ADVANCED_CONFIG_KEY,
+          projectId: id,
+        },
+      },
+    }),
+  ]);
 
   return NextResponse.json({
     ok: true,
-    project: {
-      id: project.id,
-      name: project.name,
-      slug: project.slug,
-      description: project.description,
-      published: project.published,
-      liveLayoutId,
-      createdAt: project.createdAt.toISOString(),
-      updatedAt: project.updatedAt.toISOString(),
-    },
+    project: toProjectResponse(
+      project,
+      builderLayoutConfig ? parseBuilderLayoutState(builderLayoutConfig.value) : undefined,
+      advancedConfig ? parseAdvancedProjectConfig(advancedConfig.value) : undefined
+    ),
   });
 }
 
 export async function DELETE(request: NextRequest) {
+  console.log("Debug flow: DELETE /api/projects fired");
   const user = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
@@ -238,6 +446,7 @@ export async function DELETE(request: NextRequest) {
   }
 
   await prisma.project.delete({ where: { id } });
+  emitProjectsCacheInvalidation();
 
   return NextResponse.json({ ok: true });
 }

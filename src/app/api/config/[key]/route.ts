@@ -6,10 +6,12 @@ export async function GET(
   req: Request,
   { params }: { params: Promise<{ key: string }> }
 ) {
+  console.log(`Debug flow: GET /api/config/[key] fired`);
   const ctx = await getProjectContext(req);
   if (isErrorResponse(ctx)) return ctx;
 
   const { key } = await params;
+  console.log(`Debug flow: GET /api/config/[key] params`, { key, projectId: ctx.projectId });
   const config = await prisma.appConfig.findFirst({
     where: { key, projectId: ctx.projectId },
   });
@@ -23,7 +25,22 @@ export async function GET(
     return NextResponse.json(config.value);
   }
 
-  return NextResponse.json(JSON.parse(config.value));
+  try {
+    return NextResponse.json(JSON.parse(config.value));
+  } catch (err) {
+    console.error(`Debug flow: GET /api/config/[key] parse error`, {
+      key,
+      projectId: ctx.projectId,
+      err,
+    });
+    if (key === "custom_widgets") {
+      return NextResponse.json({ widgets: [] });
+    }
+    return NextResponse.json(
+      { ok: false, error: "Invalid config payload" },
+      { status: 500 }
+    );
+  }
 }
 
 export async function PUT(

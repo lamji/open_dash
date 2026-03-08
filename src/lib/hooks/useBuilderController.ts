@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { io } from "socket.io-client";
+import type { CustomWidgetRecord } from "@/domain/dashboard/types";
 import type {
   LayoutType,
   LayoutBlock,
@@ -19,10 +20,12 @@ import type {
 import { BUILDER_CACHE_INVALIDATE_EVENT } from "@/domain/cache/types";
 import type { WidgetTemplate } from "@/domain/widgets/types";
 import { saveLayout as saveLayoutApi, getLayout, getWidgets } from "@/lib/api/builder-layouts";
+import { getCustomWidgets } from "@/lib/api/custom-widgets";
 import { createNavItem, getNavItems, deleteNavItem } from "@/lib/api/builder-nav";
 import { bootstrapSocketServer, generateAiWidgetRequest, postBuilderLog } from "@/lib/api/builder-runtime";
 import { saveBlockStyles, generateAiStyle, generateAiWidgetUpdate, generateAiAssistant, saveWidgetData as saveWidgetDataApi, saveGridRatio as saveGridRatioApi } from "@/lib/api/builder-styles";
 import type { DashboardTemplate } from "@/lib/dashboard-templates";
+import { getWidgetSpec } from "@/lib/widget-spec-registry";
 import {
   createEmptySlot,
   createBlock,
@@ -174,24 +177,574 @@ const ASSISTANT_INTENT_PREFIXES = [
 ];
 
 const BUILDER_AUTOSAVE_DELAY_MS = 1500;
+const BUILDER_VAULT_PREFIX = "open-dash:vault:builder";
+const ICON_REFERENCE_PATTERNS = [
+  { pattern: /\b(first|1st|top|leading)\b/, index: 0 },
+  { pattern: /\b(second|2nd)\b/, index: 1 },
+  { pattern: /\b(third|3rd)\b/, index: 2 },
+  { pattern: /\b(fourth|4th)\b/, index: 3 },
+] as const;
+
+type IconFieldEntry = {
+  path: string;
+  value: string;
+};
+
+type WidgetFieldEntry = {
+  path: string;
+  value: string | number | boolean;
+};
+
+function getBuilderVaultKey(projectId: string, scope: string): string {
+  console.log(`Debug flow: getBuilderVaultKey fired`, { projectId, scope });
+  return `${BUILDER_VAULT_PREFIX}:${projectId}:${scope}`;
+}
+
+function loadBuilderVault<T>(vaultKey: string): T | undefined {
+  console.log(`Debug flow: loadBuilderVault fired`, { vaultKey });
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+  try {
+    const raw = window.localStorage.getItem(vaultKey);
+    if (!raw) {
+      return undefined;
+    }
+    return JSON.parse(raw) as T;
+  } catch (error) {
+    console.error(`Debug flow: loadBuilderVault failed`, { vaultKey, error });
+    return undefined;
+  }
+}
+
+function saveBuilderVault<T>(vaultKey: string, value: T): void {
+  console.log(`Debug flow: saveBuilderVault fired`, { vaultKey });
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(vaultKey, JSON.stringify(value));
+  } catch (error) {
+    console.error(`Debug flow: saveBuilderVault failed`, { vaultKey, error });
+  }
+}
+
+function clearBuilderVault(vaultKey: string): void {
+  console.log(`Debug flow: clearBuilderVault fired`, { vaultKey });
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.removeItem(vaultKey);
+  } catch (error) {
+    console.error(`Debug flow: clearBuilderVault failed`, { vaultKey, error });
+  }
+}
+
+function collectIconFieldEntries(value: unknown, basePath = ""): IconFieldEntry[] {
+  console.log(`Debug flow: collectIconFieldEntries fired with`, {
+    basePath,
+    valueType: Array.isArray(value) ? "array" : typeof value,
+  });
+  if (value === null || value === undefined) {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, index) =>
+      collectIconFieldEntries(entry, `${basePath}[${index}]`)
+    );
+  }
+  if (typeof value !== "object") {
+    return [];
+  }
+
+  const entries: IconFieldEntry[] = [];
+  Object.entries(value as Record<string, unknown>).forEach(([key, child]) => {
+    const path = basePath ? `${basePath}.${key}` : key;
+    if (/icon/i.test(key) && typeof child === "string") {
+      entries.push({ path, value: child });
+    }
+    entries.push(...collectIconFieldEntries(child, path));
+  });
+  return entries;
+}
+
+function normalizeAssistantToken(value: string): string {
+  console.log(`Debug flow: normalizeAssistantToken fired with`, { value });
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function collectWidgetFieldEntries(value: unknown, basePath = ""): WidgetFieldEntry[] {
+  console.log(`Debug flow: collectWidgetFieldEntries fired with`, {
+    basePath,
+    valueType: Array.isArray(value) ? "array" : typeof value,
+  });
+  if (value === null || value === undefined) {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, index) =>
+      collectWidgetFieldEntries(entry, `${basePath}[${index}]`)
+    );
+  }
+  if (typeof value !== "object") {
+    if (basePath && (typeof value === "string" || typeof value === "number" || typeof value === "boolean")) {
+      return [{ path: basePath, value }];
+    }
+    return [];
+  }
+
+  return Object.entries(value as Record<string, unknown>).flatMap(([key, child]) => {
+    const path = basePath ? `${basePath}.${key}` : key;
+    return collectWidgetFieldEntries(child, path);
+  });
+}
+
+function resolveOrdinalReferenceIndex(messageLower: string, fieldCount: number): number | null {
+  console.log(`Debug flow: resolveOrdinalReferenceIndex fired with`, { messageLower, fieldCount });
+  for (const { pattern, index } of ICON_REFERENCE_PATTERNS) {
+    if (pattern.test(messageLower)) {
+      return index < fieldCount ? index : null;
+    }
+  }
+
+  const itemNumberMatch = messageLower.match(/\b(?:item|entry|row|card|icon|label|value)\s+(\d+)\b/);
+  if (itemNumberMatch) {
+    const requestedIndex = Number(itemNumberMatch[1]) - 1;
+    return requestedIndex >= 0 && requestedIndex < fieldCount ? requestedIndex : null;
+  }
+
+  if (/\b(last|final)\b/.test(messageLower)) {
+    return fieldCount > 0 ? fieldCount - 1 : null;
+  }
+
+  return null;
+}
+
+function extractFieldNameTokens(messageLower: string): string[] {
+  console.log(`Debug flow: extractFieldNameTokens fired with`, { messageLower });
+  const matches = messageLower.match(/\b[a-z][a-z0-9]*\b/g) ?? [];
+  return matches.filter((token) =>
+    ![
+      "change",
+      "set",
+      "update",
+      "edit",
+      "make",
+      "turn",
+      "first",
+      "second",
+      "third",
+      "fourth",
+      "last",
+      "final",
+      "to",
+      "the",
+      "this",
+      "that",
+      "widget",
+      "item",
+      "entry",
+      "row",
+      "card",
+    ].includes(token)
+  );
+}
+
+function groupRepeatedFieldEntries(fieldEntries: WidgetFieldEntry[]): WidgetFieldEntry[][] {
+  console.log(`Debug flow: groupRepeatedFieldEntries fired with`, { fieldCount: fieldEntries.length });
+  const groups = new Map<string, WidgetFieldEntry[]>();
+  fieldEntries.forEach((entry) => {
+    const templatePath = entry.path.replace(/\[\d+\]/g, "[]");
+    const group = groups.get(templatePath) ?? [];
+    group.push(entry);
+    groups.set(templatePath, group);
+  });
+  return [...groups.values()]
+    .filter((group) => group.length > 1)
+    .sort((left, right) => left[0]!.path.localeCompare(right[0]!.path));
+}
+
+function resolveRepeatedWidgetFieldPath(messageLower: string, fieldEntries: WidgetFieldEntry[]): string | null {
+  console.log(`Debug flow: resolveRepeatedWidgetFieldPath fired with`, {
+    messageLower,
+    fieldCount: fieldEntries.length,
+  });
+  const groupedEntries = groupRepeatedFieldEntries(fieldEntries);
+  if (groupedEntries.length === 0) {
+    return null;
+  }
+
+  const fieldTokens = extractFieldNameTokens(messageLower);
+  const matchingGroups = groupedEntries.filter((group) => {
+    const lastSegment = group[0]?.path.split(".").pop()?.replace(/\[\d+\]/g, "") ?? "";
+    const normalizedSegment = normalizeAssistantToken(lastSegment);
+    return fieldTokens.some((token) => normalizedSegment.includes(normalizeAssistantToken(token)));
+  });
+  const candidateGroups = matchingGroups.length > 0 ? matchingGroups : groupedEntries;
+  const ordinalIndex = resolveOrdinalReferenceIndex(messageLower, candidateGroups[0]?.length ?? 0);
+  if (ordinalIndex === null) {
+    return null;
+  }
+
+  if (candidateGroups.length === 1) {
+    return candidateGroups[0]?.[ordinalIndex]?.path ?? null;
+  }
+
+  if (/\bheader\b/.test(messageLower)) {
+    const headerGroup = candidateGroups.find((group) =>
+      group[0]?.path.toLowerCase().includes("header")
+    );
+    if (headerGroup) {
+      return headerGroup[ordinalIndex]?.path ?? null;
+    }
+  }
+
+  return candidateGroups[0]?.[ordinalIndex]?.path ?? null;
+}
+
+function extractExplicitReplacementValue(message: string): string | null {
+  console.log(`Debug flow: extractExplicitReplacementValue fired with`, { message });
+  const quotedValueMatch = message.match(/["']([^"']+)["']\s*$/);
+  if (quotedValueMatch) {
+    return quotedValueMatch[1]?.trim() ?? null;
+  }
+
+  const delimiterMatch = message.match(/\b(?:to|into|as)\b\s+(.+)$/i);
+  if (!delimiterMatch) {
+    return null;
+  }
+  const nextValue = delimiterMatch[1]?.trim() ?? "";
+  return nextValue.length > 0 ? nextValue : null;
+}
+
+function extractRequestedLucideIconName(message: string, availableIcons: string[]): string | null {
+  console.log(`Debug flow: extractRequestedLucideIconName fired with`, {
+    message,
+    availableIconCount: availableIcons.length,
+  });
+  const normalizedMessage = normalizeAssistantToken(message);
+  const matchingIcon = [...availableIcons]
+    .sort((left, right) => right.length - left.length)
+    .find((iconName) => normalizedMessage.includes(normalizeAssistantToken(iconName)));
+  console.log(`Debug flow: extractRequestedLucideIconName result`, { matchingIcon });
+  return matchingIcon ?? null;
+}
+
+function resolveIconFieldPath(messageLower: string, iconFields: IconFieldEntry[]): string | null {
+  console.log(`Debug flow: resolveIconFieldPath fired with`, {
+    messageLower,
+    iconFieldCount: iconFields.length,
+  });
+  if (iconFields.length === 0) {
+    return null;
+  }
+  if (iconFields.length === 1) {
+    return iconFields[0]?.path ?? null;
+  }
+
+  if (/\bheader\b/.test(messageLower)) {
+    const headerField = iconFields.find((entry) => entry.path.toLowerCase().includes("header"));
+    if (headerField) {
+      return headerField.path;
+    }
+  }
+
+  for (const { pattern, index } of ICON_REFERENCE_PATTERNS) {
+    if (pattern.test(messageLower) && iconFields[index]) {
+      return iconFields[index].path;
+    }
+  }
+
+  const iconNumberMatch = messageLower.match(/\bicon\s+(\d+)\b/);
+  if (iconNumberMatch) {
+    const requestedIndex = Number(iconNumberMatch[1]) - 1;
+    if (requestedIndex >= 0 && iconFields[requestedIndex]) {
+      return iconFields[requestedIndex].path;
+    }
+  }
+
+  if (/\b(last|final)\b/.test(messageLower)) {
+    return iconFields[iconFields.length - 1]?.path ?? null;
+  }
+
+  return null;
+}
+
+function buildExplicitIconCommandSuggestion(context: GroqStyleContext | null, message: string): string | null {
+  console.log(`Debug flow: buildExplicitIconCommandSuggestion fired with`, {
+    hasContext: !!context,
+    hasWidget: !!context?.widget,
+    message,
+  });
+  if (!context?.widget) {
+    return null;
+  }
+
+  const messageLower = message.toLowerCase();
+  if (!messageLower.includes("icon")) {
+    return null;
+  }
+
+  const targetWidget = context.promptContextSnapshot?.targetWidget;
+  const availableIcons = targetWidget?.iconCandidates ?? context.promptContextSnapshot?.availableLucideIcons ?? [];
+  const nextIconName = extractRequestedLucideIconName(message, availableIcons);
+  if (!nextIconName) {
+    return null;
+  }
+
+  const iconFields = collectIconFieldEntries(context.widget.widgetData).filter((entry) => {
+    if (!targetWidget?.iconFieldPaths || targetWidget.iconFieldPaths.length === 0) {
+      return true;
+    }
+    return targetWidget.iconFieldPaths.some((fieldPath) => {
+      const normalizedFieldPath = fieldPath.replace(/\[\]/g, "");
+      return entry.path.startsWith(normalizedFieldPath);
+    });
+  });
+  const targetPath = resolveIconFieldPath(messageLower, iconFields);
+  if (!targetPath) {
+    return null;
+  }
+
+  const command = `/data set ${targetPath} to ${nextIconName}`;
+  console.log(`Debug flow: buildExplicitIconCommandSuggestion result`, { command });
+  return command;
+}
+
+function buildExplicitWidgetDataCommandSuggestion(context: GroqStyleContext | null, message: string): string | null {
+  console.log(`Debug flow: buildExplicitWidgetDataCommandSuggestion fired with`, {
+    hasContext: !!context,
+    hasWidget: !!context?.widget,
+    message,
+  });
+  if (!context?.widget) {
+    return null;
+  }
+
+  const messageLower = message.toLowerCase();
+  const targetWidget = context.promptContextSnapshot?.targetWidget;
+  const availableIcons = targetWidget?.iconCandidates ?? context.promptContextSnapshot?.availableLucideIcons ?? [];
+  const explicitIconCommand = buildExplicitIconCommandSuggestion(context, message);
+  if (explicitIconCommand) {
+    return explicitIconCommand;
+  }
+
+  const allowedFieldPaths = [
+    ...(targetWidget?.widgetDataPaths ?? []),
+    ...(targetWidget?.iconFieldPaths ?? []),
+  ];
+  const fieldEntries = collectWidgetFieldEntries(context.widget.widgetData).filter((entry) => {
+    if (allowedFieldPaths.length === 0) {
+      return true;
+    }
+    return allowedFieldPaths.some((fieldPath) => {
+      const normalizedFieldPath = fieldPath.replace(/\[\]/g, "");
+      return entry.path.startsWith(normalizedFieldPath);
+    });
+  });
+  const targetPath = resolveRepeatedWidgetFieldPath(messageLower, fieldEntries);
+  if (!targetPath) {
+    return null;
+  }
+
+  const nextValue = /icon/i.test(targetPath)
+    ? extractRequestedLucideIconName(message, availableIcons)
+    : extractExplicitReplacementValue(message);
+  if (!nextValue) {
+    return null;
+  }
+
+  const command = `/data set ${targetPath} to ${nextValue}`;
+  console.log(`Debug flow: buildExplicitWidgetDataCommandSuggestion result`, { command });
+  return command;
+}
+
+function mapCustomWidgetTemplates(widgets: CustomWidgetRecord[]): WidgetTemplate[] {
+  return widgets.map((widget) => ({
+    id: widget.id,
+    slug: `custom-${widget.id}`,
+    runtimeWidgetId: widget.widgetId,
+    title: widget.title,
+    description: widget.description,
+    category: widget.category,
+    jsxCode: JSON.stringify(widget.widgetData ?? {}),
+    widgetData: widget.widgetData,
+  }));
+}
+
+function buildWidgetDataEditorPayload(
+  widgetId: string | undefined,
+  widgetCategory: string | undefined,
+  widgetData: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  console.log(`Debug flow: buildWidgetDataEditorPayload fired with`, {
+    widgetId,
+    widgetCategory,
+    hasWidgetData: !!widgetData,
+  });
+  if (!widgetData) {
+    return {};
+  }
+
+  const payload = JSON.parse(JSON.stringify(widgetData)) as Record<string, unknown>;
+  const spec = widgetId && widgetCategory ? getWidgetSpec(widgetId, widgetCategory, payload) : null;
+
+  const inferIconValue = (entry: Record<string, unknown>, path: string): string => {
+    const badge = typeof entry.badge === "string" ? entry.badge.toLowerCase() : "";
+    const status = typeof entry.status === "string" ? entry.status.toLowerCase() : "";
+    const level = typeof entry.level === "string" ? entry.level.toLowerCase() : "";
+
+    if (path.toLowerCase().includes("header")) {
+      return widgetCategory === "leaderboard" ? "Award" : "Sparkles";
+    }
+    if (badge === "gold" || level === "gold") return "Trophy";
+    if (badge === "silver" || level === "silver") return "Medal";
+    if (badge === "bronze" || level === "bronze") return "Award";
+    if (status.includes("error")) return "TriangleAlert";
+    if (status.includes("warning")) return "TriangleAlert";
+    if (status.includes("success")) return "CheckCircle2";
+    if (status.includes("active")) return "Activity";
+    return "Sparkles";
+  };
+
+  const ensureIconPath = (target: Record<string, unknown>, path: string) => {
+    if (!path) {
+      return;
+    }
+
+    const segments = path.split(".").filter(Boolean);
+    const visit = (current: unknown, index: number, pathCursor: string) => {
+      if (current === null || current === undefined || index >= segments.length) {
+        return;
+      }
+
+      const segment = segments[index]!;
+      const isArraySegment = segment.endsWith("[]");
+      const cleanSegment = segment.replace(/\[\]$/, "");
+
+      if (typeof current !== "object") {
+        return;
+      }
+
+      const record = current as Record<string, unknown>;
+
+      if (isArraySegment) {
+        const currentArray = Array.isArray(record[cleanSegment]) ? (record[cleanSegment] as unknown[]) : [];
+        if (currentArray.length === 0) {
+          return;
+        }
+        currentArray.forEach((entry) => {
+          visit(entry, index + 1, `${pathCursor}${cleanSegment}[].`);
+        });
+        return;
+      }
+
+      if (index === segments.length - 1) {
+        if (typeof record[cleanSegment] !== "string" || String(record[cleanSegment]).trim().length === 0) {
+          record[cleanSegment] = inferIconValue(record, `${pathCursor}${cleanSegment}`);
+        }
+        return;
+      }
+
+      if (!record[cleanSegment] || typeof record[cleanSegment] !== "object") {
+        record[cleanSegment] = {};
+      }
+
+      visit(record[cleanSegment], index + 1, `${pathCursor}${cleanSegment}.`);
+    };
+
+    visit(target, 0, "");
+  };
+
+  spec?.iconFieldPaths.forEach((path) => {
+    ensureIconPath(payload, path);
+  });
+
+  if (widgetId === "agent-leaderboard") {
+    const entries = Array.isArray(payload.entries)
+      ? payload.entries.map((entry) => {
+          if (!entry || typeof entry !== "object") {
+            return entry;
+          }
+          const typedEntry = entry as Record<string, unknown>;
+          const badge = typeof typedEntry.badge === "string" ? typedEntry.badge : null;
+          const defaultIcon =
+            badge === "gold" || badge === "silver" || badge === "bronze"
+              ? "Trophy"
+              : undefined;
+          const defaultIconColor =
+            badge === "gold"
+              ? "#eab308"
+              : badge === "silver"
+                ? "#94a3b8"
+                : badge === "bronze"
+                  ? "#b45309"
+                  : undefined;
+
+          return {
+            ...typedEntry,
+            icon: typeof typedEntry.icon === "string" ? typedEntry.icon : defaultIcon,
+            iconColor:
+              typeof typedEntry.iconColor === "string"
+                ? typedEntry.iconColor
+                : defaultIconColor,
+          };
+        })
+      : widgetData.entries;
+
+    return {
+      ...payload,
+      headerIcon:
+        typeof payload.headerIcon === "string" ? payload.headerIcon : "Award",
+      headerIconColor:
+        typeof payload.headerIconColor === "string"
+          ? payload.headerIconColor
+          : "#eab308",
+      entries,
+    };
+  }
+
+  return payload;
+}
 
 async function fetchBuilderLayoutState(projectId: string): Promise<{
   ok: boolean;
   status: number;
   draftLayoutId: string | null;
+  draftLayoutByNavItemId: Record<string, string | null>;
+  activeNavItemId: string | null;
   publishedLayoutId: string | null;
   lastPublishedAt: string | null;
 }> {
   console.log(`Debug flow: fetchBuilderLayoutState fired with`, { projectId });
   if (!projectId) {
-    return { ok: false, status: 400, draftLayoutId: null, publishedLayoutId: null, lastPublishedAt: null };
+    return {
+      ok: false,
+      status: 400,
+      draftLayoutId: null,
+      draftLayoutByNavItemId: {},
+      activeNavItemId: null,
+      publishedLayoutId: null,
+      lastPublishedAt: null,
+    };
   }
   const res = await fetch(`/api/config/builder_layout_state?projectId=${projectId}`);
   if (!res.ok) {
-    return { ok: false, status: res.status, draftLayoutId: null, publishedLayoutId: null, lastPublishedAt: null };
+    return {
+      ok: false,
+      status: res.status,
+      draftLayoutId: null,
+      draftLayoutByNavItemId: {},
+      activeNavItemId: null,
+      publishedLayoutId: null,
+      lastPublishedAt: null,
+    };
   }
   const payload = await res.json() as {
     draftLayoutId?: string | null;
+    draftLayoutByNavItemId?: Record<string, string | null>;
+    activeNavItemId?: string | null;
     publishedLayoutId?: string | null;
     lastPublishedAt?: string | null;
   } | null;
@@ -199,6 +752,11 @@ async function fetchBuilderLayoutState(projectId: string): Promise<{
     ok: true,
     status: res.status,
     draftLayoutId: payload?.draftLayoutId ?? null,
+    draftLayoutByNavItemId:
+      payload?.draftLayoutByNavItemId && typeof payload.draftLayoutByNavItemId === "object"
+        ? payload.draftLayoutByNavItemId
+        : {},
+    activeNavItemId: payload?.activeNavItemId ?? null,
     publishedLayoutId: payload?.publishedLayoutId ?? null,
     lastPublishedAt: payload?.lastPublishedAt ?? null,
   };
@@ -208,6 +766,8 @@ async function saveBuilderLayoutState(
   projectId: string,
   state: {
     draftLayoutId: string | null;
+    draftLayoutByNavItemId?: Record<string, string | null>;
+    activeNavItemId?: string | null;
     publishedLayoutId?: string | null;
     lastPublishedAt?: string | null;
   }
@@ -222,6 +782,34 @@ async function saveBuilderLayoutState(
     body: JSON.stringify(state),
   });
   return { ok: res.ok, status: res.status };
+}
+
+function resolveDraftLayoutIdForActiveNav(
+  state: {
+    draftLayoutId: string | null;
+    draftLayoutByNavItemId: Record<string, string | null>;
+    activeNavItemId: string | null;
+  },
+  activeNavItemId: string
+): string | null {
+  const hasScopedDraft = Object.prototype.hasOwnProperty.call(
+    state.draftLayoutByNavItemId,
+    activeNavItemId
+  );
+  console.log(`Debug flow: resolveDraftLayoutIdForActiveNav fired`, {
+    activeNavItemId,
+    serverActiveNavItemId: state.activeNavItemId,
+    hasScopedDraft,
+    scopedDraftCount: Object.keys(state.draftLayoutByNavItemId).length,
+    hasGlobalDraft: !!state.draftLayoutId,
+  });
+  if (hasScopedDraft) {
+    return state.draftLayoutByNavItemId[activeNavItemId] ?? null;
+  }
+  const shouldUseLegacyGlobalDraft =
+    Object.keys(state.draftLayoutByNavItemId).length === 0 &&
+    state.activeNavItemId === activeNavItemId;
+  return shouldUseLegacyGlobalDraft ? state.draftLayoutId : null;
 }
 
 function detectButtonWidgetDataIntent(messageLower: string): boolean {
@@ -251,6 +839,26 @@ function detectAssistantIntent(messageLower: string): boolean {
     messageLower.includes("what should i");
   const result = hasQuestionMark || hasPrefix || hasHelpLanguage;
   console.log(`Debug flow: detectAssistantIntent result`, { hasQuestionMark, hasPrefix, hasHelpLanguage, result });
+  return result;
+}
+
+function isDirectStyleExecutionIntent(messageLower: string): boolean {
+  console.log(`Debug flow: isDirectStyleExecutionIntent fired with`, { messageLower });
+  const startsAsQuestionOrHelp = ASSISTANT_INTENT_PREFIXES.some((prefix) => messageLower.startsWith(prefix));
+  const hasQuestionMark = messageLower.includes("?");
+  const hasActionVerb = /\b(move|align|justify|center|place|put|set|make|change|update|add|remove|stretch)\b/.test(messageLower);
+  const hasLayoutTarget =
+    STYLE_REQUEST_KEYWORDS.some((keyword) => messageLower.includes(keyword)) ||
+    CONTAINER_LAYOUT_KEYWORDS.some((keyword) => messageLower.includes(keyword)) ||
+    /\b(right|left|top|bottom|middle|end|start)\b/.test(messageLower);
+  const result = !startsAsQuestionOrHelp && !hasQuestionMark && hasActionVerb && hasLayoutTarget;
+  console.log(`Debug flow: isDirectStyleExecutionIntent result`, {
+    startsAsQuestionOrHelp,
+    hasQuestionMark,
+    hasActionVerb,
+    hasLayoutTarget,
+    result,
+  });
   return result;
 }
 
@@ -374,8 +982,12 @@ export function useBuilder() {
   const queryClient = useQueryClient();
   const navItemsQueryKey = ["builder-nav-items", projectId] as const;
   const widgetTemplatesQueryKey = ["builder-widget-templates"] as const;
+  const navItemsVaultKey = getBuilderVaultKey(projectId, "nav-items");
+  const widgetTemplatesVaultKey = getBuilderVaultKey(projectId, "widget-templates");
+  const customWidgetTemplatesVaultKey = getBuilderVaultKey(projectId, "custom-widget-templates");
 
   const [blocks, setBlocks] = useState<LayoutBlock[]>([]);
+  const [activeNavItemId, setActiveNavItemId] = useState<string | null>(null);
   const [navItemModalOpen, setNavItemModalOpen] = useState(false);
   const [addingNavItem, setAddingNavItem] = useState(false);
   const [widgetCategoryModalOpen, setWidgetCategoryModalOpen] = useState(false);
@@ -397,6 +1009,7 @@ export function useBuilder() {
   const [layoutId, setLayoutId] = useState<string | null>(null);
   const [dataJsonError, setDataJsonError] = useState<string | null>(null);
   const [gridRatioModal, setGridRatioModal] = useState<{blockId: string} | null>(null);
+  const [isDraftRestoring, setIsDraftRestoring] = useState(false);
   const [autosaveState, setAutosaveState] = useState<BuilderAutosaveState>({
     hasUnsavedChanges: false,
     isDraftSavedLocally: true,
@@ -410,6 +1023,7 @@ export function useBuilder() {
   const remoteAutosaveEnabledRef = useRef(false);
   const latestBlocksRef = useRef<LayoutBlock[]>(blocks);
   const latestLayoutIdRef = useRef<string | null>(layoutId);
+  const draftLayoutVaultKey = getBuilderVaultKey(projectId, `draft-layout:${activeNavItemId ?? "global"}`);
   const blocksSignature = useMemo(() => JSON.stringify(blocks), [blocks]);
 
   latestBlocksRef.current = blocks;
@@ -437,12 +1051,77 @@ export function useBuilder() {
       return mapWidgetTemplates(data.widgets ?? []);
     },
     staleTime: 5 * 60 * 1000,
+    initialData: () => loadBuilderVault<WidgetTemplate[]>(widgetTemplatesVaultKey),
+  });
+
+  const customWidgetTemplatesQuery = useQuery({
+    queryKey: ["builder-custom-widget-templates", projectId],
+    queryFn: async () => {
+      console.log(`Debug flow: customWidgetTemplatesQuery queryFn fired with`, { projectId });
+      const widgets = await getCustomWidgets(projectId);
+      return mapCustomWidgetTemplates(widgets);
+    },
+    enabled: !!projectId,
+    staleTime: 30_000,
+    initialData: () => loadBuilderVault<WidgetTemplate[]>(customWidgetTemplatesVaultKey),
   });
 
   const navItems = navItemsQuery.data ?? [];
   const widgetTemplates = widgetTemplatesQuery.data ?? [];
+  const customWidgetTemplates = customWidgetTemplatesQuery.data ?? [];
   const loadingNavItems = !!projectId && navItemsQuery.isLoading;
-  const loadingTemplates = widgetTemplatesQuery.isLoading;
+  const loadingTemplates = widgetTemplatesQuery.isLoading || (!!projectId && customWidgetTemplatesQuery.isLoading);
+
+  useEffect(() => {
+    console.log(`Debug flow: useBuilder active nav sync effect fired`, {
+      activeNavItemId,
+      navItemCount: navItems.length,
+    });
+    if (navItems.length === 0) {
+      if (activeNavItemId !== null) {
+        setActiveNavItemId(null);
+      }
+      return;
+    }
+    const hasActiveNav = activeNavItemId
+      ? navItems.some((item) => item.id === activeNavItemId)
+      : false;
+    if (!hasActiveNav) {
+      setActiveNavItemId(navItems[0]?.id ?? null);
+    }
+  }, [activeNavItemId, navItems]);
+
+  useEffect(() => {
+    console.log(`Debug flow: useBuilder nav items vault sync effect fired`, {
+      projectId,
+      hasData: !!navItemsQuery.data,
+    });
+    if (!projectId || !navItemsQuery.data) {
+      return;
+    }
+    saveBuilderVault(navItemsVaultKey, navItemsQuery.data);
+  }, [navItemsQuery.data, navItemsVaultKey, projectId]);
+
+  useEffect(() => {
+    console.log(`Debug flow: useBuilder widget templates vault sync effect fired`, {
+      hasData: !!widgetTemplatesQuery.data,
+    });
+    if (!widgetTemplatesQuery.data) {
+      return;
+    }
+    saveBuilderVault(widgetTemplatesVaultKey, widgetTemplatesQuery.data);
+  }, [widgetTemplatesQuery.data, widgetTemplatesVaultKey]);
+
+  useEffect(() => {
+    console.log(`Debug flow: useBuilder custom widget templates vault sync effect fired`, {
+      projectId,
+      hasData: !!customWidgetTemplatesQuery.data,
+    });
+    if (!projectId || !customWidgetTemplatesQuery.data) {
+      return;
+    }
+    saveBuilderVault(customWidgetTemplatesVaultKey, customWidgetTemplatesQuery.data);
+  }, [customWidgetTemplatesQuery.data, customWidgetTemplatesVaultKey, projectId]);
 
   useEffect(() => {
     console.log(`Debug flow: useBuilder socket subscription fired with`, { projectId });
@@ -508,16 +1187,60 @@ export function useBuilder() {
   }, [projectId, queryClient]);
 
   useEffect(() => {
-    console.log(`Debug flow: builder draft restore effect fired with`, { projectId });
+    console.log(`Debug flow: builder draft restore effect fired with`, { projectId, activeNavItemId });
     let cancelled = false;
     const restoreBuilderDraft = async () => {
-      if (!projectId) {
+      const localDraft = loadBuilderVault<{
+        layoutId: string | null;
+        blocks: LayoutBlock[];
+        lastSavedAt: string | null;
+      }>(draftLayoutVaultKey);
+      const normalizedLocalDraftBlocks =
+        localDraft && Array.isArray(localDraft.blocks)
+          ? normalizeBlocks(localDraft.blocks)
+          : null;
+      const hasLocalDraft = !!normalizedLocalDraftBlocks;
+      console.log(`Debug flow: builder draft restore local vault check`, {
+        projectId,
+        activeNavItemId,
+        hasLocalDraft,
+        localDraftLayoutId: localDraft?.layoutId ?? null,
+        localDraftBlockCount: normalizedLocalDraftBlocks?.length ?? 0,
+      });
+
+      setIsDraftRestoring(!hasLocalDraft);
+      draftHydratedRef.current = false;
+      if (!projectId || !activeNavItemId) {
         setBlocks([]);
         setLayoutId(null);
         remoteAutosaveEnabledRef.current = false;
         draftHydratedRef.current = true;
         lastTrackedBlocksSignatureRef.current = JSON.stringify([]);
+        clearBuilderVault(draftLayoutVaultKey);
+        setIsDraftRestoring(false);
         return;
+      }
+      if (normalizedLocalDraftBlocks) {
+        const normalizedLocalDraftSignature = JSON.stringify(normalizedLocalDraftBlocks);
+        console.log(`Debug flow: builder draft restore primed from local vault`, {
+          projectId,
+          activeNavItemId,
+          layoutId: localDraft?.layoutId ?? null,
+          blockCount: normalizedLocalDraftBlocks.length,
+        });
+        setBlocks(normalizedLocalDraftBlocks);
+        setLayoutId(localDraft?.layoutId ?? null);
+        lastTrackedBlocksSignatureRef.current = normalizedLocalDraftSignature;
+        setAutosaveState((prev) => ({
+          ...prev,
+          hasUnsavedChanges: false,
+          isDraftSavedLocally: true,
+          isAutosaving: false,
+          lastSavedAt: localDraft?.lastSavedAt ?? null,
+        }));
+      } else {
+        setBlocks([]);
+        setLayoutId(null);
       }
       try {
         const builderLayoutState = await fetchBuilderLayoutState(projectId);
@@ -526,19 +1249,65 @@ export function useBuilder() {
         }
         if (!builderLayoutState.ok) {
           remoteAutosaveEnabledRef.current = false;
-          setBlocks([]);
-          setLayoutId(null);
-          lastTrackedBlocksSignatureRef.current = JSON.stringify([]);
-          setAutosaveState((prev) => ({
-            ...prev,
-            hasUnsavedChanges: false,
-            isDraftSavedLocally: false,
-            isAutosaving: false,
-          }));
+          if (normalizedLocalDraftBlocks) {
+            console.log(`Debug flow: builder draft fallback from vault`, {
+              projectId,
+              layoutId: localDraft?.layoutId ?? null,
+              blockCount: normalizedLocalDraftBlocks.length,
+              reason: "builder layout state fetch failed",
+            });
+            console.log(`Debug flow: builder draft fallback normalized vault blocks`, {
+              projectId,
+              activeNavItemId,
+              blockCount: normalizedLocalDraftBlocks.length,
+            });
+            setBlocks(normalizedLocalDraftBlocks);
+            setLayoutId(localDraft?.layoutId ?? null);
+            lastTrackedBlocksSignatureRef.current = JSON.stringify(normalizedLocalDraftBlocks);
+            setAutosaveState((prev) => ({
+              ...prev,
+              hasUnsavedChanges: false,
+              isDraftSavedLocally: true,
+              isAutosaving: false,
+              lastSavedAt: localDraft?.lastSavedAt ?? null,
+            }));
+          } else {
+            setBlocks([]);
+            setLayoutId(null);
+            lastTrackedBlocksSignatureRef.current = JSON.stringify([]);
+            setAutosaveState((prev) => ({
+              ...prev,
+              hasUnsavedChanges: false,
+              isDraftSavedLocally: false,
+              isAutosaving: false,
+            }));
+            clearBuilderVault(draftLayoutVaultKey);
+          }
           return;
         }
         remoteAutosaveEnabledRef.current = true;
-        if (!builderLayoutState.draftLayoutId) {
+        const currentDraftLayoutId = resolveDraftLayoutIdForActiveNav(
+          builderLayoutState,
+          activeNavItemId
+        );
+        if (!currentDraftLayoutId) {
+          if (normalizedLocalDraftBlocks) {
+            console.log(`Debug flow: builder draft restore retained local vault after missing remote draft`, {
+              projectId,
+              activeNavItemId,
+              layoutId: localDraft?.layoutId ?? null,
+              blockCount: normalizedLocalDraftBlocks.length,
+            });
+            draftHydratedRef.current = true;
+            setAutosaveState((prev) => ({
+              ...prev,
+              hasUnsavedChanges: false,
+              isDraftSavedLocally: true,
+              isAutosaving: false,
+              lastSavedAt: localDraft?.lastSavedAt ?? prev.lastSavedAt,
+            }));
+            return;
+          }
           setBlocks([]);
           setLayoutId(null);
           draftHydratedRef.current = true;
@@ -548,13 +1317,24 @@ export function useBuilder() {
             hasUnsavedChanges: false,
             isDraftSavedLocally: true,
           }));
+          clearBuilderVault(draftLayoutVaultKey);
           return;
         }
-        const layoutResult = await getLayout(builderLayoutState.draftLayoutId);
+        const layoutResult = await getLayout(currentDraftLayoutId);
         if (cancelled) {
           return;
         }
         if (!layoutResult.ok || !layoutResult.layout) {
+          if (normalizedLocalDraftBlocks) {
+            console.log(`Debug flow: builder draft restore retained local vault after layout fetch miss`, {
+              projectId,
+              activeNavItemId,
+              layoutId: localDraft?.layoutId ?? null,
+              blockCount: normalizedLocalDraftBlocks.length,
+            });
+            draftHydratedRef.current = true;
+            return;
+          }
           setBlocks([]);
           setLayoutId(null);
           draftHydratedRef.current = true;
@@ -565,33 +1345,66 @@ export function useBuilder() {
         const restoredSignature = JSON.stringify(restoredBlocks);
         console.log(`Debug flow: builder draft restored`, {
           projectId,
-          layoutId: builderLayoutState.draftLayoutId,
+          activeNavItemId,
+          layoutId: currentDraftLayoutId,
           blockCount: restoredBlocks.length,
         });
         lastTrackedBlocksSignatureRef.current = restoredSignature;
         setBlocks(restoredBlocks);
-        setLayoutId(builderLayoutState.draftLayoutId);
+        setLayoutId(currentDraftLayoutId);
         setAutosaveState({
           hasUnsavedChanges: false,
           isDraftSavedLocally: true,
           isAutosaving: false,
           lastSavedAt: layoutResult.layout.updatedAt ?? null,
         });
+        saveBuilderVault(draftLayoutVaultKey, {
+          layoutId: currentDraftLayoutId,
+          blocks: restoredBlocks,
+          lastSavedAt: layoutResult.layout.updatedAt ?? null,
+        });
       } catch (err) {
         console.error(`Debug flow: builder draft restore failed`, err);
-        setBlocks([]);
-        setLayoutId(null);
-        remoteAutosaveEnabledRef.current = false;
-        lastTrackedBlocksSignatureRef.current = JSON.stringify([]);
+        if (normalizedLocalDraftBlocks) {
+          console.log(`Debug flow: builder draft fallback from vault`, {
+            projectId,
+            layoutId: localDraft?.layoutId ?? null,
+            blockCount: normalizedLocalDraftBlocks.length,
+            reason: "restore exception",
+          });
+          console.log(`Debug flow: builder draft exception normalized vault blocks`, {
+            projectId,
+            activeNavItemId,
+            blockCount: normalizedLocalDraftBlocks.length,
+          });
+          setBlocks(normalizedLocalDraftBlocks);
+          setLayoutId(localDraft?.layoutId ?? null);
+          lastTrackedBlocksSignatureRef.current = JSON.stringify(normalizedLocalDraftBlocks);
+          setAutosaveState((prev) => ({
+            ...prev,
+            hasUnsavedChanges: false,
+            isDraftSavedLocally: true,
+            isAutosaving: false,
+            lastSavedAt: localDraft?.lastSavedAt ?? null,
+          }));
+        } else {
+          setBlocks([]);
+          setLayoutId(null);
+          remoteAutosaveEnabledRef.current = false;
+          lastTrackedBlocksSignatureRef.current = JSON.stringify([]);
+        }
       } finally {
         draftHydratedRef.current = true;
+        if (!cancelled) {
+          setIsDraftRestoring(false);
+        }
       }
     };
     void restoreBuilderDraft();
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [activeNavItemId, draftLayoutVaultKey, projectId]);
 
   useEffect(() => {
     console.log(`Debug flow: builder dirty tracking effect fired with`, {
@@ -613,6 +1426,23 @@ export function useBuilder() {
   }, [blocks.length, blocksSignature]);
 
   useEffect(() => {
+    console.log(`Debug flow: builder local draft vault sync effect fired with`, {
+      projectId,
+      activeNavItemId,
+      blockCount: blocks.length,
+      draftHydrated: draftHydratedRef.current,
+    });
+    if (!projectId || !activeNavItemId || !draftHydratedRef.current) {
+      return;
+    }
+    saveBuilderVault(draftLayoutVaultKey, {
+      layoutId,
+      blocks,
+      lastSavedAt: autosaveState.lastSavedAt,
+    });
+  }, [activeNavItemId, autosaveState.lastSavedAt, blocks, draftLayoutVaultKey, layoutId, projectId]);
+
+  useEffect(() => {
     console.log(`Debug flow: builder autosave effect fired with`, {
       hasUnsavedChanges: autosaveState.hasUnsavedChanges,
       isDraftSavedLocally: autosaveState.isDraftSavedLocally,
@@ -625,18 +1455,18 @@ export function useBuilder() {
       autosaveTimerRef.current = null;
     }
     if (
+      !activeNavItemId ||
       !draftHydratedRef.current ||
       !remoteAutosaveEnabledRef.current ||
       !autosaveState.hasUnsavedChanges ||
       autosaveState.isDraftSavedLocally ||
-      savingLayout ||
-      blocks.length === 0
+      savingLayout
     ) {
       return;
     }
     autosaveTimerRef.current = setTimeout(() => {
       void (async () => {
-        const latestBlocks = latestBlocksRef.current;
+        const latestBlocks = normalizeBlocks(latestBlocksRef.current);
         const latestPersistedLayoutId = latestLayoutIdRef.current;
         const anchorBlock = latestBlocks[0];
         console.log(`Debug flow: builder autosave task fired with`, {
@@ -645,6 +1475,66 @@ export function useBuilder() {
           anchorBlockId: anchorBlock?.id,
         });
         if (!anchorBlock) {
+          console.log(`Debug flow: builder autosave empty-layout branch fired`, {
+            activeNavItemId,
+            projectId,
+            latestPersistedLayoutId,
+          });
+          const emptyLayoutSaveResult = await saveLayoutApi("Draft Layout", []);
+          if (!emptyLayoutSaveResult.ok) {
+            console.error(`Debug flow: builder autosave empty-layout save failed`, {
+              error: emptyLayoutSaveResult.error,
+            });
+            setAutosaveState((prev) => ({
+              ...prev,
+              isAutosaving: false,
+              isDraftSavedLocally: false,
+            }));
+            return;
+          }
+          const nextDraftLayoutId = emptyLayoutSaveResult.layout?.id ?? null;
+          const builderLayoutState = await fetchBuilderLayoutState(projectId);
+          if (!builderLayoutState.ok) {
+            if (builderLayoutState.status === 401) {
+              remoteAutosaveEnabledRef.current = false;
+            }
+            setAutosaveState((prev) => ({
+              ...prev,
+              isAutosaving: false,
+              isDraftSavedLocally: false,
+            }));
+            return;
+          }
+          const nextDraftLayoutByNavItemId = {
+            ...builderLayoutState.draftLayoutByNavItemId,
+            [activeNavItemId]: nextDraftLayoutId,
+          };
+          const saveBuilderStateResult = await saveBuilderLayoutState(projectId, {
+            draftLayoutId: nextDraftLayoutId,
+            draftLayoutByNavItemId: nextDraftLayoutByNavItemId,
+            activeNavItemId,
+            publishedLayoutId: builderLayoutState.publishedLayoutId,
+            lastPublishedAt: builderLayoutState.lastPublishedAt,
+          });
+          if (!saveBuilderStateResult.ok) {
+            if (saveBuilderStateResult.status === 401) {
+              remoteAutosaveEnabledRef.current = false;
+            }
+            setAutosaveState((prev) => ({
+              ...prev,
+              isAutosaving: false,
+              isDraftSavedLocally: false,
+            }));
+            return;
+          }
+          setLayoutId(nextDraftLayoutId);
+          setAutosaveState((prev) => ({
+            ...prev,
+            hasUnsavedChanges: false,
+            isAutosaving: false,
+            lastSavedAt: new Date().toISOString(),
+            isDraftSavedLocally: true,
+          }));
           return;
         }
         setAutosaveState((prev) => ({ ...prev, isAutosaving: true }));
@@ -669,8 +1559,14 @@ export function useBuilder() {
             }));
             return;
           }
+          const nextDraftLayoutByNavItemId = {
+            ...builderLayoutState.draftLayoutByNavItemId,
+            [activeNavItemId]: nextDraftLayoutId ?? null,
+          };
           const saveBuilderStateResult = await saveBuilderLayoutState(projectId, {
             draftLayoutId: nextDraftLayoutId,
+            draftLayoutByNavItemId: nextDraftLayoutByNavItemId,
+            activeNavItemId,
             publishedLayoutId: builderLayoutState.publishedLayoutId,
             lastPublishedAt: builderLayoutState.lastPublishedAt,
           });
@@ -716,6 +1612,7 @@ export function useBuilder() {
     blocks.length,
     blocksSignature,
     layoutId,
+    activeNavItemId,
     projectId,
     savingLayout,
   ]);
@@ -790,7 +1687,7 @@ export function useBuilder() {
   const placeWidget = (blockId: string, slotIdx: number, template: WidgetTemplate) => {
     console.log(`Debug flow: placeWidget fired with`, { blockId, slotIdx, slug: template.slug });
     const placed: PlacedWidget = {
-      widgetId: template.slug,
+      widgetId: template.runtimeWidgetId ?? template.slug,
       category: template.category,
       title: template.title,
       widgetData: template.widgetData ?? {},
@@ -815,6 +1712,18 @@ export function useBuilder() {
         const existingSlot = newSlots[slotIdx] ?? createEmptySlot();
         newSlots[slotIdx] = { ...existingSlot, widget: null };
         return { ...block, slots: newSlots };
+      });
+      return result.blocks;
+    });
+  };
+
+  const clearSlotContent = (blockId: string, slotIdx: number) => {
+    console.log(`Debug flow: clearSlotContent fired with`, { blockId, slotIdx });
+    setBlocks((prev) => {
+      const result = updateBlockInTree(normalizeBlocks(prev), blockId, (block) => {
+        const nextSlots = [...block.slots];
+        nextSlots[slotIdx] = createEmptySlot();
+        return { ...block, slots: nextSlots };
       });
       return result.blocks;
     });
@@ -985,6 +1894,7 @@ export function useBuilder() {
       const data = await createNavItem(label.trim(), projectId);
       if (!data.ok || !data.item) throw new Error(data.error ?? "Failed to create nav item");
       console.log(`Debug flow: addNavItem saved`, { id: data.item.id });
+      setActiveNavItemId(data.item.id);
       await queryClient.invalidateQueries({ queryKey: navItemsQueryKey });
       return true;
     } catch (err) {
@@ -1002,6 +1912,7 @@ export function useBuilder() {
       const data = await deleteNavItem(itemId, projectId);
       if (!data.ok) throw new Error(data.error ?? "Failed to delete nav item");
       console.log(`Debug flow: removeNavItem deleted`, { itemId });
+      setActiveNavItemId((prev) => (prev === itemId ? null : prev));
       await queryClient.invalidateQueries({ queryKey: navItemsQueryKey });
       return true;
     } catch (err) {
@@ -1046,7 +1957,15 @@ export function useBuilder() {
 
     setCssEditorState(editorState);
     setCodeEditorTab("css");
-    setDataEditorDraft(widget?.widgetData ? JSON.stringify(widget.widgetData, null, 2) : "");
+    setDataEditorDraft(
+      widget?.widgetData
+        ? JSON.stringify(
+            buildWidgetDataEditorPayload(widget.widgetId, widget.category, widget.widgetData),
+            null,
+            2
+          )
+        : ""
+    );
     setFunctionEditorDraft(widget?.functionCode ?? "");
     return editorState;
   };
@@ -1193,6 +2112,40 @@ export function useBuilder() {
   const sendGroqMessage = async (message: string) => {
     console.log(`Debug flow: sendGroqMessage fired with`, { message, context: groqChatContext });
     if (!groqChatContext || !message.trim()) return;
+    const currentBlock = findBlockInTree(normalizeBlocks(blocks), groqChatContext.blockId);
+    const currentIsBlockLevel = groqChatContext.slotIdx < 0;
+    const currentWidget = !currentIsBlockLevel
+      ? currentBlock?.slots[groqChatContext.slotIdx]?.widget ?? null
+      : null;
+    const refreshedPromptContextResult = buildPromptContext(
+      groqChatContext.blockId,
+      groqChatContext.slotIdx,
+      groqChatContext.currentCss
+    );
+    const effectivePromptContext = refreshedPromptContextResult?.promptContext ?? groqChatContext.promptContext;
+    const effectivePromptContextSnapshot =
+      refreshedPromptContextResult?.snapshot ?? groqChatContext.promptContextSnapshot;
+    const effectiveWidget = currentWidget
+      ? {
+          widgetId: currentWidget.widgetId,
+          category: currentWidget.category,
+          title: currentWidget.title,
+          widgetData: currentWidget.widgetData,
+        }
+      : groqChatContext.widget;
+    setGroqChatContext((prev) => prev ? {
+      ...prev,
+      promptContext: effectivePromptContext,
+      promptContextSnapshot: effectivePromptContextSnapshot,
+      widget: effectiveWidget,
+    } : prev);
+    console.log(`Debug flow: sendGroqMessage refreshed prompt context`, {
+      blockId: groqChatContext.blockId,
+      slotIdx: groqChatContext.slotIdx,
+      hasPromptContext: !!effectivePromptContext,
+      promptContextLength: effectivePromptContext?.length ?? 0,
+      hasWidget: !!effectiveWidget,
+    });
 
     // Parse slash command prefix
     let forcedMode: "styles" | "data" | "config" | "help" | null = null;
@@ -1254,6 +2207,10 @@ export function useBuilder() {
     const updatedHistory = [...groqMessages, userMsg];
     setGroqMessages(updatedHistory);
     setGroqChatLoading(true);
+    const explicitDataCommand = buildExplicitWidgetDataCommandSuggestion(groqChatContext, cleanMessage);
+    const explicitDataCommandHint = explicitDataCommand
+      ? `\n\nSuggested command: \`${explicitDataCommand}\``
+      : "";
 
     let resolvedMode: "styles" | "data" | "config" | null =
       forcedMode === "styles" || forcedMode === "data" || forcedMode === "config"
@@ -1261,21 +2218,22 @@ export function useBuilder() {
         : null;
     let assistantResultForMessage: Awaited<ReturnType<typeof generateAiAssistant>> | null = null;
 
-    const contextualPromptLength = groqChatContext.promptContext
-      ? `${cleanMessage}\n\n${groqChatContext.promptContext}`.length
+    const contextualPromptLength = effectivePromptContext
+      ? `${cleanMessage}\n\n${effectivePromptContext}`.length
       : cleanMessage.length;
 
-    try {
-      if (forcedMode === "help" || !resolvedMode) {
-        assistantResultForMessage = await generateAiAssistant(
+	    try {
+      const shouldAutoExecuteStyles = isDirectStyleExecutionIntent(messageLower);
+	      if (forcedMode === "help" || !resolvedMode) {
+	        assistantResultForMessage = await generateAiAssistant(
           groqChatContext.blockId,
           groqChatContext.slotIdx,
           groqChatContext.blockType,
           groqChatContext.currentCss,
           cleanMessage,
           groqMessages,
-          groqChatContext.widget,
-          groqChatContext.promptContext
+          effectiveWidget,
+          effectivePromptContext
         );
       }
 
@@ -1284,7 +2242,8 @@ export function useBuilder() {
           ? `\n\nSuggested command mode: /${assistantResultForMessage.recommendedMode}`
           : "";
         const assistantContent = (assistantResultForMessage.reply ?? assistantResultForMessage.error ?? "I couldn't answer that yet.")
-          + suggestedModeHint;
+          + suggestedModeHint
+          + explicitDataCommandHint;
         setGroqMessages((prev) => [...prev, { role: "assistant", content: assistantContent }]);
         return;
       }
@@ -1296,11 +2255,22 @@ export function useBuilder() {
           : null;
         resolvedMode = modeFromResponseType ?? modeFromRecommendation;
 
-        if (!resolvedMode || assistantResultForMessage.responseType === "answer" || assistantResultForMessage.responseType === "clarify") {
+        const shouldPromoteAnswerToStyles =
+          shouldAutoExecuteStyles &&
+          modeFromRecommendation === "styles" &&
+          (assistantResultForMessage.responseType === "answer" || assistantResultForMessage.responseType === "clarify");
+
+        if (shouldPromoteAnswerToStyles) {
+          resolvedMode = "styles";
+        }
+
+        if ((!resolvedMode || assistantResultForMessage.responseType === "answer" || assistantResultForMessage.responseType === "clarify") && !shouldPromoteAnswerToStyles) {
           const suggestedModeHint = assistantResultForMessage.recommendedMode && assistantResultForMessage.recommendedMode !== "none"
             ? `\n\nSuggested command mode: /${assistantResultForMessage.recommendedMode}`
             : "";
-          const assistantContent = (assistantResultForMessage.reply ?? "I couldn't answer that yet.") + suggestedModeHint;
+          const assistantContent = (assistantResultForMessage.reply ?? "I couldn't answer that yet.")
+            + suggestedModeHint
+            + explicitDataCommandHint;
           setGroqMessages((prev) => [...prev, { role: "assistant", content: assistantContent }]);
           return;
         }
@@ -1309,7 +2279,7 @@ export function useBuilder() {
       if (!resolvedMode) {
         // Fallback heuristic only when assistant routing fails.
         const isStyleRequest = STYLE_REQUEST_KEYWORDS.some((keyword) => messageLower.includes(keyword));
-        const isButtonWidget = groqChatContext.widget?.category === "button";
+        const isButtonWidget = effectiveWidget?.category === "button";
         const shouldRouteButtonVisualToData = isButtonWidget
           && detectButtonWidgetDataIntent(messageLower);
         const hasDataOrConfigKeyword = DATA_OR_CONFIG_KEYWORDS.some((keyword) => messageLower.includes(keyword));
@@ -1330,28 +2300,29 @@ export function useBuilder() {
         assistantResponseType: assistantResultForMessage?.responseType,
         assistantRecommendedMode: assistantResultForMessage?.recommendedMode,
         isWidgetDataUpdate,
-        hasWidget: !!groqChatContext.widget,
-        hasPromptContext: !!groqChatContext.promptContext,
+        hasWidget: !!effectiveWidget,
+        hasPromptContext: !!effectivePromptContext,
         contextualPromptLength,
       });
 
-      if (isWidgetDataUpdate && !groqChatContext.widget) {
+      if (isWidgetDataUpdate && !effectiveWidget) {
         const missingWidgetMessage = "This target has no widget data to edit yet. Select a filled widget slot or ask for /styles to change container layout.";
         setGroqMessages((prev) => [...prev, { role: "assistant", content: missingWidgetMessage }]);
         return;
       }
 
-      if (isWidgetDataUpdate && groqChatContext.widget) {
+      if (isWidgetDataUpdate && effectiveWidget) {
+        const widgetUpdateMessage = explicitDataCommand ?? cleanMessage;
         const result = await generateAiWidgetUpdate(
           groqChatContext.blockId,
           groqChatContext.slotIdx,
-          groqChatContext.widget.widgetData,
-          groqChatContext.widget.widgetId,
-          groqChatContext.widget.category,
-          cleanMessage,
+          effectiveWidget.widgetData,
+          effectiveWidget.widgetId,
+          effectiveWidget.category,
+          widgetUpdateMessage,
           groqMessages,
           widgetUpdateMode,
-          groqChatContext.promptContext
+          effectivePromptContext
         );
 
         if (result.ok && result.widgetData) {
@@ -1370,14 +2341,21 @@ export function useBuilder() {
             });
             return updateResult.blocks;
           });
-          setGroqChatContext((prev) => prev && prev.widget ? { 
-            ...prev, 
-            widget: { ...prev.widget, widgetData: result.widgetData! } 
+          const nextPromptContextResult = buildPromptContext(blockId, slotIdx, groqChatContext.currentCss);
+          setGroqChatContext((prev) => prev && prev.widget ? {
+            ...prev,
+            promptContext: nextPromptContextResult?.promptContext ?? prev.promptContext,
+            promptContextSnapshot: nextPromptContextResult?.snapshot ?? prev.promptContextSnapshot,
+            widget: { ...prev.widget, widgetData: result.widgetData! }
           } : prev);
           await saveWidgetDataApi(blockId, slotIdx, result.widgetData, undefined, layoutId ?? undefined);
-          setGroqMessages((prev) => [...prev, { role: "assistant", content: "Widget data updated successfully." }]);
+          const successMessage = explicitDataCommand
+            ? `Widget data updated successfully.\n\nResolved command: \`${explicitDataCommand}\``
+            : "Widget data updated successfully.";
+          setGroqMessages((prev) => [...prev, { role: "assistant", content: successMessage }]);
         } else {
-          setGroqMessages((prev) => [...prev, { role: "assistant", content: result.error ?? "Failed to update widget data." }]);
+          const failureMessage = (result.error ?? "Failed to update widget data.") + explicitDataCommandHint;
+          setGroqMessages((prev) => [...prev, { role: "assistant", content: failureMessage }]);
         }
       } else {
         const result = await generateAiStyle(
@@ -1387,9 +2365,9 @@ export function useBuilder() {
           groqChatContext.currentCss,
           cleanMessage,
           groqMessages,
-          groqChatContext.widget,
+          effectiveWidget,
           resolvedMode === "styles" ? "styles" : undefined,
-          groqChatContext.promptContext
+          effectivePromptContext
         );
         const assistantContent = result.clarificationQuestion ?? result.css ?? "Sorry, could not generate styles.";
         setGroqMessages((prev) => [...prev, { role: "assistant", content: assistantContent }]);
@@ -1447,7 +2425,10 @@ export function useBuilder() {
   };
 
   const saveLayout = async (name: string): Promise<string | null> => {
-    console.log(`Debug flow: saveLayout fired with`, { name, blockCount: blocks.length });
+    console.log(`Debug flow: saveLayout fired with`, { name, blockCount: blocks.length, activeNavItemId });
+    if (!activeNavItemId) {
+      return null;
+    }
     setSavingLayout(true);
     try {
       const data = await saveLayoutApi(name.trim() || "My Dashboard", blocks);
@@ -1455,8 +2436,14 @@ export function useBuilder() {
       console.log(`Debug flow: saveLayout saved`, { id: data.layout?.id });
       const builderLayoutState = await fetchBuilderLayoutState(projectId);
       if (builderLayoutState.ok) {
+        const nextDraftLayoutByNavItemId = {
+          ...builderLayoutState.draftLayoutByNavItemId,
+          [activeNavItemId]: data.layout?.id ?? null,
+        };
         const saveBuilderStateResult = await saveBuilderLayoutState(projectId, {
           draftLayoutId: data.layout?.id ?? null,
+          draftLayoutByNavItemId: nextDraftLayoutByNavItemId,
+          activeNavItemId,
           publishedLayoutId: builderLayoutState.publishedLayoutId,
           lastPublishedAt: builderLayoutState.lastPublishedAt,
         });
@@ -1482,9 +2469,11 @@ export function useBuilder() {
   };
 
   const variantTemplates = showWidgetVariantPicker
-    ? widgetTemplates.filter((w) => {
-        const result = w.category === showWidgetVariantPicker.category
-          && !(showWidgetVariantPicker.category === "button" && LEGACY_GROUPED_BUTTON_WIDGETS.has(w.slug));
+    ? (showWidgetVariantPicker.category === "custom" ? customWidgetTemplates : widgetTemplates).filter((w) => {
+        const result = showWidgetVariantPicker.category === "custom"
+          ? true
+          : w.category === showWidgetVariantPicker.category
+            && !(showWidgetVariantPicker.category === "button" && LEGACY_GROUPED_BUTTON_WIDGETS.has(w.slug));
         console.log(`Debug flow: variantTemplates filter fired with`, {
           category: showWidgetVariantPicker.category,
           slug: w.slug,
@@ -1497,6 +2486,7 @@ export function useBuilder() {
   return {
     blocks,
     navItems,
+    activeNavItemId,
     navItemModalOpen,
     addingNavItem,
     loadingNavItems,
@@ -1505,9 +2495,11 @@ export function useBuilder() {
     showWidgetTypePicker,
     showWidgetVariantPicker,
     widgetTemplates,
+    customWidgetTemplates,
     loadingTemplates,
     variantTemplates,
     previewMode,
+    isDraftRestoring,
     savingLayout,
     autosaveState,
     projectId,
@@ -1524,6 +2516,7 @@ export function useBuilder() {
     groqChatLoading,
     layoutId,
     setLayoutId,
+    setActiveNavItemId,
     dataJsonError,
     setDataJsonError,
     togglePreview,
@@ -1539,6 +2532,7 @@ export function useBuilder() {
     closeWidgetVariantPicker,
     placeWidget,
     removeWidget,
+    clearSlotContent,
     generateAiWidget,
     openNavItemModal,
     closeNavItemModal,

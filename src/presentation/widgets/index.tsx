@@ -1269,13 +1269,22 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
 
   // ── LEADERBOARD ─────────────────────────────────────────────────
   "agent-leaderboard": (data) => {
-    const entries = (data.entries as {rank:number;name:string;score:number;badge:string|null}[]) ?? [{rank:1,name:"Alice M.",score:2840,badge:"gold"},{rank:2,name:"Bob K.",score:2310,badge:"silver"},{rank:3,name:"Carol D.",score:1980,badge:"bronze"},{rank:4,name:"David R.",score:1560,badge:null}];
+    const entries = (data.entries as {
+      rank:number;
+      name:string;
+      score:number;
+      badge:string|null;
+      icon?: string;
+      iconColor?: string;
+    }[]) ?? [{rank:1,name:"Alice M.",score:2840,badge:"gold",icon:"Trophy",iconColor:"#eab308"},{rank:2,name:"Bob K.",score:2310,badge:"silver",icon:"Trophy",iconColor:"#94a3b8"},{rank:3,name:"Carol D.",score:1980,badge:"bronze",icon:"Trophy",iconColor:"#b45309"},{rank:4,name:"David R.",score:1560,badge:null}];
     const title = (data.title as string) ?? "Top Agents";
+    const headerIconName = (data.headerIcon as string | undefined)?.trim() || "Award";
+    const headerIconColor = (data.headerIconColor as string | undefined)?.trim() || "#eab308";
     const badgeEl: Record<string,React.ReactElement> = {gold:<Trophy className="w-4 h-4 text-yellow-500" />,silver:<Trophy className="w-4 h-4 text-slate-400" />,bronze:<Trophy className="w-4 h-4 text-amber-700" />};
     return (
       <div className="flex flex-col h-full gap-2">
-        <div className="flex items-center justify-between"><p className="text-sm font-bold text-slate-800">{title}</p><Award className="w-4 h-4 text-yellow-500" /></div>
-        {entries.slice(0,4).map(e=><div key={e.rank} className="flex items-center gap-2"><span className="text-xs font-bold text-slate-400 w-4">{e.rank}</span><div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-violet-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">{e.name[0]}</div><span className="text-xs font-medium text-slate-700 flex-1">{e.name}</span>{e.badge && badgeEl[e.badge]}<span className="text-xs font-bold text-slate-800">{e.score.toLocaleString()}</span></div>)}
+        <div className="flex items-center justify-between"><p className="text-sm font-bold text-slate-800">{title}</p><span style={{ color: headerIconColor }}><DynamicIcon name={headerIconName} className="w-4 h-4" /></span></div>
+        {entries.slice(0,4).map(e=>{const entryIconName=(e.icon ?? "").trim(); const entryIconColor=(e.iconColor ?? "").trim(); const entryIcon=entryIconName?<span style={entryIconColor?{color:entryIconColor}:undefined}><DynamicIcon name={entryIconName} className="w-4 h-4" /></span>:null; return <div key={e.rank} className="flex items-center gap-2"><span className="text-xs font-bold text-slate-400 w-4">{e.rank}</span><div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-violet-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">{e.name[0]}</div><span className="text-xs font-medium text-slate-700 flex-1">{e.name}</span>{entryIcon ?? (e.badge ? badgeEl[e.badge] : null)}<span className="text-xs font-bold text-slate-800">{e.score.toLocaleString()}</span></div>})}
       </div>
     );
   },
@@ -1438,9 +1447,9 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const iconColor = (data.iconColor as string | undefined)?.trim();
     console.log(`Debug flow: button-left-icon preview fired with`, { label, iconName, buttonBgColor, buttonTextColor, iconColor });
     return (
-      <div className="flex h-full items-center" data-test-id="button-left-icon-container">
+      <div className="inline-flex h-full max-w-full items-center" data-test-id="button-left-icon-container">
         <button
-          className="w-full min-w-0 px-3 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg inline-flex items-center justify-center gap-2 hover:bg-indigo-700"
+          className="inline-flex w-fit min-w-0 max-w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
           style={{
             ...(buttonBgColor ? { backgroundColor: buttonBgColor } : {}),
             ...(buttonTextColor ? { color: buttonTextColor } : {}),
@@ -1466,7 +1475,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const iconColor = (data.iconColor as string | undefined)?.trim();
     console.log(`Debug flow: button-right-icon preview fired with`, { label, iconName, buttonBgColor, buttonTextColor, iconColor });
     return (
-      <div className="flex h-full items-center" data-test-id="button-right-icon-container">
+      <div className="inline-flex h-full max-w-full items-center" data-test-id="button-right-icon-container">
         <button
           className="w-fit px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg inline-flex items-center gap-2 hover:bg-emerald-700"
           style={{
@@ -1490,7 +1499,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const label = (data.label as string) ?? "Create Report";
     console.log(`Debug flow: button-primary preview fired with`, { label });
     return (
-      <div className="flex h-full items-center" data-test-id="button-primary-container">
+      <div className="inline-flex h-full max-w-full items-center" data-test-id="button-primary-container">
         <button className="w-fit rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm" data-test-id="button-primary-btn">
           {label}
         </button>
@@ -1502,7 +1511,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const label = (data.label as string) ?? "Save Draft";
     console.log(`Debug flow: button-secondary preview fired with`, { label });
     return (
-      <div className="flex h-full items-center" data-test-id="button-secondary-container">
+      <div className="inline-flex h-full max-w-full items-center" data-test-id="button-secondary-container">
         <button className="w-fit rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm" data-test-id="button-secondary-btn">
           {label}
         </button>
@@ -1514,7 +1523,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const label = (data.label as string) ?? "View Details";
     console.log(`Debug flow: button-outline preview fired with`, { label });
     return (
-      <div className="flex h-full items-center" data-test-id="button-outline-container">
+      <div className="inline-flex h-full max-w-full items-center" data-test-id="button-outline-container">
         <button className="w-fit rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm" data-test-id="button-outline-btn">
           {label}
         </button>
@@ -1526,7 +1535,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const label = (data.label as string) ?? "Skip for now";
     console.log(`Debug flow: button-ghost preview fired with`, { label });
     return (
-      <div className="flex h-full items-center" data-test-id="button-ghost-container">
+      <div className="inline-flex h-full max-w-full items-center" data-test-id="button-ghost-container">
         <button className="w-fit rounded-xl bg-transparent px-4 py-2 text-sm font-semibold text-slate-600" data-test-id="button-ghost-btn">
           {label}
         </button>
@@ -1538,8 +1547,8 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const label = (data.label as string) ?? "Open analytics";
     console.log(`Debug flow: button-link preview fired with`, { label });
     return (
-      <div className="flex h-full items-center" data-test-id="button-link-container">
-        <button className="inline-flex w-full min-w-0 items-center justify-center gap-1 px-1 py-2 text-sm font-semibold text-blue-700" data-test-id="button-link-btn">
+      <div className="inline-flex h-full max-w-full items-center" data-test-id="button-link-container">
+        <button className="inline-flex w-fit min-w-0 max-w-full items-center justify-center gap-1 px-1 py-2 text-sm font-semibold text-blue-700" data-test-id="button-link-btn">
           <span className="truncate">{label}</span>
           <ArrowUpRight className="w-3.5 h-3.5 flex-shrink-0" data-test-id="button-link-icon" />
         </button>
@@ -1551,7 +1560,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const label = (data.label as string) ?? "Delete item";
     console.log(`Debug flow: button-destructive preview fired with`, { label });
     return (
-      <div className="flex h-full items-center" data-test-id="button-destructive-container">
+      <div className="inline-flex h-full max-w-full items-center" data-test-id="button-destructive-container">
         <button className="w-fit rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm" data-test-id="button-destructive-btn">
           {label}
         </button>
@@ -1563,7 +1572,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const label = (data.label as string) ?? "Upload file";
     console.log(`Debug flow: upload-button-solid preview fired with`, { label });
     return (
-      <div className="flex h-full items-center" data-test-id="upload-button-solid-container">
+      <div className="inline-flex h-full max-w-full items-center" data-test-id="upload-button-solid-container">
         <button className="inline-flex w-fit items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm" data-test-id="upload-button-solid-btn">
           <Upload className="w-4 h-4" data-test-id="upload-button-solid-icon" />
           <span>{label}</span>
@@ -1576,7 +1585,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const label = (data.label as string) ?? "Upload assets";
     console.log(`Debug flow: upload-button-outline preview fired with`, { label });
     return (
-      <div className="flex h-full items-center" data-test-id="upload-button-outline-container">
+      <div className="inline-flex h-full max-w-full items-center" data-test-id="upload-button-outline-container">
         <button className="inline-flex w-fit items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700" data-test-id="upload-button-outline-btn">
           <Upload className="w-4 h-4" data-test-id="upload-button-outline-icon" />
           <span>{label}</span>
@@ -1589,7 +1598,7 @@ export const WIDGET_PREVIEWS: Record<string, (data: PD) => React.ReactElement> =
     const label = (data.label as string) ?? "Drag and upload";
     console.log(`Debug flow: upload-button-dashed preview fired with`, { label });
     return (
-      <div className="flex h-full items-center" data-test-id="upload-button-dashed-container">
+      <div className="inline-flex h-full max-w-full items-center" data-test-id="upload-button-dashed-container">
         <button className="inline-flex w-fit items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-600" data-test-id="upload-button-dashed-btn">
           <Upload className="w-4 h-4" data-test-id="upload-button-dashed-icon" />
           <span>{label}</span>
