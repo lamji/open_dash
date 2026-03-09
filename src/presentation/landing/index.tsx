@@ -23,7 +23,7 @@ import {
 import { motion } from "framer-motion";
 import { BuilderShowcase } from "./modules/BuilderShowcase";
 import { Footer } from "@/components/shared/Footer";
-import { LANDING_FEATURES, LANDING_STATS, LANDING_STEPS, LANDING_TESTIMONIALS } from "./useLanding";
+import { LANDING_FEATURES, LANDING_FOOTER_SECTIONS, LANDING_STATS, LANDING_STEPS, LANDING_TESTIMONIALS } from "./useLanding";
 
 /* ────────────────────────────────────────────────────── */
 /*  Data                                                  */
@@ -62,7 +62,7 @@ export default function LandingPage() {
 
       <section className="relative overflow-hidden px-6 py-32"><div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-violet-500/5 via-fuchsia-500/5 to-cyan-500/5" /><div className="pointer-events-none absolute left-1/2 top-1/2 h-[400px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-500/10 blur-3xl" /><div className="relative mx-auto max-w-2xl text-center"><h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Ready to build something?</h2><p className="mx-auto mt-4 max-w-md text-base text-zinc-400">Join thousands of teams shipping dashboards and internal tools faster than ever.</p><div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"><Link href="/signup"><Button size="lg" data-test-id="landing-cta-signup" className="h-12 gap-2 bg-white px-8 text-base font-semibold text-black hover:bg-zinc-200">Start Building Free <ArrowRight size={16} /></Button></Link></div><p className="mt-4 text-xs text-zinc-600">No credit card required</p></div></section>
 
-      <Footer />
+      <Footer sections={LANDING_FOOTER_SECTIONS} />
     </div>
   );
 }

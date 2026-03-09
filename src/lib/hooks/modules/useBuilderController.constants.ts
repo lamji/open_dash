@@ -1,0 +1,137 @@
+export const BUILDER_CATEGORIES = [
+  "stats",
+  "charts",
+  "progress",
+  "activity",
+  "health",
+  "timeline",
+  "table",
+  "funnel",
+  "leaderboard",
+  "summary",
+  "button",
+  "dropdown",
+  "menu",
+  "search",
+  "form",
+] as const;
+
+export const CSS_PROPERTY_ALIASES: Record<string, string> = {
+  align: "align-items",
+};
+
+export const FLEX_LAYOUT_PROPS = new Set([
+  "justify-content",
+  "align-items",
+  "align-content",
+  "flex-direction",
+  "flex-wrap",
+  "row-gap",
+  "column-gap",
+]);
+
+export const NON_FLEX_DISPLAY_VALUES = new Set([
+  "block",
+  "inline",
+  "inline-block",
+  "contents",
+]);
+
+export const BUTTON_INNER_STYLE_KEYWORDS = [
+  "button",
+  "cta",
+  "icon",
+  "label",
+  "text",
+  "background",
+  "bg",
+  "color",
+  "arrow",
+  "variant",
+  "primary",
+  "secondary",
+  "outline",
+  "ghost",
+  "link",
+  "destructive",
+  "upload",
+];
+
+export const CONTAINER_LAYOUT_KEYWORDS = [
+  "container",
+  "contain",
+  "wrapper",
+  "column",
+  "align",
+  "justify",
+  "display",
+  "flex",
+  "gap",
+  "padding",
+  "margin",
+  "width",
+  "height",
+  "position",
+  "center",
+];
+
+export const STYLE_REQUEST_KEYWORDS = [
+  "height",
+  "width",
+  "padding",
+  "margin",
+  "background",
+  "border",
+  "shadow",
+  "radius",
+  "opacity",
+  "flex",
+  "align",
+  "justify",
+  "gap",
+  "display",
+  "overflow",
+  "position",
+  "transform",
+  "transition",
+  "font",
+  "text-",
+  "style",
+];
+
+export const DATA_OR_CONFIG_KEYWORDS = [
+  "color",
+  "month",
+  "label",
+  "data",
+  "value",
+  "bar",
+  "segment",
+  "chart",
+  "complete",
+  "add",
+  "change title",
+  "update",
+  "rename",
+  "title",
+  "disabled",
+  "enable",
+  "feature",
+  "pagination",
+  "sorting",
+  "filter",
+  "column",
+];
+
+export const ASSISTANT_INTENT_PREFIXES = [
+  "how",
+  "what",
+  "why",
+  "can ",
+  "is ",
+  "are ",
+  "where",
+  "which",
+  "when",
+  "help",
+];

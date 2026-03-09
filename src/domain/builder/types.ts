@@ -134,6 +134,16 @@ export interface BuilderAutosaveState {
   lastSavedAt: string | null;
 }
 
+export interface IconFieldEntry {
+  path: string;
+  value: string;
+}
+
+export interface WidgetFieldEntry {
+  path: string;
+  value: string | number | boolean;
+}
+
 export interface NavItem {
   id: string;
   label: string;
